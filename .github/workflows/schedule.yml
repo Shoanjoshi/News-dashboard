@@ -2,7 +2,7 @@ name: Daily Dashboard Builder
 
 on:
   schedule:
-    - cron: "0 11 * * *"   # Runs at 7 AM ET daily
+    - cron: "0 11 * * *"   # Runs daily at 7 AM ET
   workflow_dispatch:
 
 jobs:
@@ -10,42 +10,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    # 1. Checkout repository
     - name: Checkout Repo
       uses: actions/checkout@v4
 
+    # 2. Set up Python environment
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: "3.10"
 
-    # Install OS-level dependencies for lxml and newspaper3k
+    # 3. Install OS dependencies (required for newspaper3k and lxml)
     - name: Install system dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y libxml2-dev libxslt-dev
 
-    # Install Python dependencies
+    # 4. Install Python packages
     - name: Install Python dependencies
       run: |
         pip install --upgrade pip
         pip install -r requirements.txt
 
-    # Generate the dashboard
+    # 5. Run the dashboard generator script
     - name: Generate Dashboard
       shell: bash
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
-        # Add repo root to PYTHONPATH so internal imports work
+        # Make sure Python can import from the repo root
         export PYTHONPATH="${PYTHONPATH}:${{ github.workspace }}"
         echo "PYTHONPATH=$PYTHONPATH"
 
-        # Run script
+        # Execute script
         python scripts/generate_dashboard.py
 
-    # Publish dashboard to GitHub Pages
+    # 6. Publish the dashboard to GitHub Pages (Step 4)
     - name: Publish to GitHub Pages
       uses: peaceiris/actions-gh-pages@v4
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         publish_dir: ./dashboard
+        force_orphan: true
