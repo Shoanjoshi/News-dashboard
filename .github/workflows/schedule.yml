@@ -2,7 +2,7 @@ name: Daily Dashboard Builder
 
 on:
   schedule:
-    - cron: "0 11 * * *"   # 7 AM ET
+    - cron: "0 11 * * *"   # Runs at 7 AM ET daily
   workflow_dispatch:
 
 jobs:
@@ -18,24 +18,32 @@ jobs:
       with:
         python-version: "3.10"
 
-    - name: Install dependencies
+    # Install OS-level dependencies for lxml and newspaper3k
+    - name: Install system dependencies
       run: |
+        sudo apt-get update
+        sudo apt-get install -y libxml2-dev libxslt-dev
+
+    # Install Python dependencies
+    - name: Install Python dependencies
+      run: |
+        pip install --upgrade pip
         pip install -r requirements.txt
 
+    # Generate the dashboard
     - name: Generate Dashboard
       shell: bash
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       run: |
-        # Add repo root to PYTHONPATH so imports work
+        # Add repo root to PYTHONPATH so internal imports work
         export PYTHONPATH="${PYTHONPATH}:${{ github.workspace }}"
-
-        # Show Python path for debugging
         echo "PYTHONPATH=$PYTHONPATH"
 
-        # Run dashboard generator
+        # Run script
         python scripts/generate_dashboard.py
 
+    # Publish dashboard to GitHub Pages
     - name: Publish to GitHub Pages
       uses: peaceiris/actions-gh-pages@v4
       with:
