@@ -1,0 +1,10 @@
+feedparser
+newspaper3k
+gensim
+nltk
+pyLDAvis
+matplotlib
+openai
+beautifulsoup4
+lxml
+requests
