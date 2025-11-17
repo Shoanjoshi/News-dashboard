@@ -25,6 +25,7 @@ jobs:
     - name: Generate Dashboard
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      working-directory: ${{ github.workspace }}
       run: |
         python scripts/generate_dashboard.py
 
