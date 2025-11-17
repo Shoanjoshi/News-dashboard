@@ -23,10 +23,17 @@ jobs:
         pip install -r requirements.txt
 
     - name: Generate Dashboard
+      shell: bash
       env:
         OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-      working-directory: ${{ github.workspace }}
       run: |
+        # Add repo root to PYTHONPATH so imports work
+        export PYTHONPATH="${PYTHONPATH}:${{ github.workspace }}"
+
+        # Show Python path for debugging
+        echo "PYTHONPATH=$PYTHONPATH"
+
+        # Run dashboard generator
         python scripts/generate_dashboard.py
 
     - name: Publish to GitHub Pages
