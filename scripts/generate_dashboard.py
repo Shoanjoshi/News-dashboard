@@ -2,72 +2,50 @@ import os
 import json
 import datetime
 
-from LDA_engine_with_OPENAI_v03 import (
+from LDA_engine_with_BERTopic_v04 import (
     fetch_articles,
-    build_lda_topic_model,
+    build_bertopic_model,
     interpret_topics,
     MAX_ARTICLES_TO_FETCH,
-    NUM_TOPICS_FOR_LDA
+    NUM_TOPICS_FOR_LDA,
 )
-
-import pyLDAvis
-import pyLDAvis.gensim_models as gensimvis
-
-
 
 OUTPUT_DIR = "dashboard"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
 def generate_dashboard():
-
     # ------------------------------------------------------------
-    # 1. Run the pipeline
+    # 1. Run full pipeline
     # ------------------------------------------------------------
     print("Fetching articles...")
     articles = fetch_articles(MAX_ARTICLES_TO_FETCH)
     texts = [a["text"] for a in articles]
 
-    print("Running LDA...")
-    lda_model, corpus, dictionary = build_lda_topic_model(
+    print("Running BERTopic...")
+    topic_model, topics, probs = build_bertopic_model(
         texts, num_topics=NUM_TOPICS_FOR_LDA
     )
 
     print("Generating LLM topic summaries...")
-    topic_summaries = interpret_topics(lda_model, corpus, texts)
-
-
-    # ------------------------------------------------------------
-    # 2. Build LDA HTML and embed it
-    # ------------------------------------------------------------
-    lda_html_path = os.path.join(OUTPUT_DIR, "lda_vis.html")
-
-    vis = gensimvis.prepare(lda_model, corpus, dictionary)
-    pyLDAvis.save_html(vis, lda_html_path)
-
-    # Read but remove outer HTML/BODY tags so embedding looks clean
-    with open(lda_html_path, "r", encoding="utf-8") as f:
-        lda_raw_html = f.read()
-
-    # Remove <html>, <body>
-    lda_clean = (
-        lda_raw_html
-        .replace("<html>", "")
-        .replace("</html>", "")
-        .replace("<body>", "")
-        .replace("</body>", "")
-    )
-
+    topic_summaries = interpret_topics(topic_model, texts)
 
     # ------------------------------------------------------------
-    # 3. Build final dashboard page
+    # 2. Generate BERTopic HTML (topic map)
     # ------------------------------------------------------------
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # BERTopic uses Plotly under the hood; we embed the HTML snippet
+    vis_fig = topic_model.visualize_topics()
+    lda_html_embedded = vis_fig.to_html(full_html=False, include_plotlyjs="cdn")
+
+    # ------------------------------------------------------------
+    # 3. Generate full HTML dashboard
+    # ------------------------------------------------------------
+    timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
     final_html = f"""
 <html>
 <head>
-    <title>Daily News Topic Dashboard</title>
+    <title>Daily News Topic Dashboard (BERTopic + GPT)</title>
 
     <style>
         body {{
@@ -125,10 +103,10 @@ def generate_dashboard():
 
 <div class="main-container">
 
-    <!-- LEFT SIDE: LDA MAP -->
+    <!-- LEFT SIDE: BERTopic MAP -->
     <div class="left-panel">
-        <h2>LDA Topic Map</h2>
-        {lda_clean}
+        <h2>BERTopic Topic Map</h2>
+        {lda_html_embedded}
     </div>
 
     <!-- RIGHT SIDE: GPT TOPIC SUMMARIES -->
@@ -175,4 +153,3 @@ def generate_dashboard():
 
 if __name__ == "__main__":
     generate_dashboard()
-
