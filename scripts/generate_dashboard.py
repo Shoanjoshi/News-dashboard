@@ -15,125 +15,132 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def generate_dashboard():
     # ------------------------------------------------------------
-    # 1. Full pipeline (from Version 4)
+    # 1. Full pipeline (same as before)
     # ------------------------------------------------------------
     print("Fetching articles...")
     articles = fetch_articles(MAX_ARTICLES_TO_FETCH)
     texts = [a["text"] for a in articles]
 
     print("Running BERTopic...")
-    topic_model, topics, probs = build_bertopic_model(
-        texts, num_topics=NUM_TOPICS_FOR_LDA
-    )
+    topic_model, topics, probs = build_bertopic_model(texts)
 
-    print("Generating LLM topic summaries...")
-    topic_summaries_raw = interpret_topics(topic_model, texts)
+    print("Generating GPT topic summaries...")
+    raw_summaries = interpret_topics(topic_model, texts)
 
-    # Parse JSON outputs
     topic_summaries = {}
-    for tid, summary_json in topic_summaries_raw.items():
+    for tid, js in raw_summaries.items():
         try:
-            topic_summaries[tid] = json.loads(summary_json)
+            topic_summaries[tid] = json.loads(js)
         except:
             topic_summaries[tid] = {
                 "topic_id": tid,
                 "label": f"Topic {tid}",
-                "description": summary_json,
+                "description": js,
                 "subthemes": []
             }
 
     # ------------------------------------------------------------
-    # 2. Metadata extraction for improved visualization
+    # 2. Extract metadata
     # ------------------------------------------------------------
     doc_info = topic_model.get_document_info(texts)
     topic_info = topic_model.get_topic_info()
 
-    valid_topics = topic_info[topic_info["Topic"] != -1]["Topic"].tolist()
+    valid_topics = [
+        t for t in topic_info["Topic"].tolist()
+        if t != -1
+    ]
 
     hover_texts = []
     custom_labels = []
 
     for tid in valid_topics:
+
         label = topic_summaries[tid]["label"]
 
-        # Top words
         top_words = topic_model.get_topic(tid)
-        top_words_text = ", ".join([w[0] for w in top_words[:5]]) if top_words else ""
+        top_word_str = ", ".join([w[0] for w in top_words[:5]]) if top_words else ""
 
-        # Top headlines
         df_t = (
             doc_info[doc_info["Topic"] == tid]
             .sort_values("Probability", ascending=False)
             .head(3)
         )
+
         headlines = []
         for idx in df_t.index:
             title = articles[idx]["title"]
             if title:
                 headlines.append(title)
 
-        headlines_text = "; ".join(headlines) if headlines else "No headline"
+        headline_str = "; ".join(headlines) if headlines else "No headline"
 
         hover_texts.append(
             f"<b>{label}</b><br>"
-            f"<b>Top words:</b> {top_words_text}<br>"
-            f"<b>Headlines:</b> {headlines_text}"
+            f"<b>Top words:</b> {top_word_str}<br>"
+            f"<b>Headlines:</b> {headline_str}"
         )
 
         custom_labels.append(label)
 
     # ------------------------------------------------------------
-    # 3. Upgraded BERTopic visualization (Version 5.1 + Version 6)
+    # 3. Fix A — Safe fallback if no topic embeddings available
     # ------------------------------------------------------------
-    fig = topic_model.visualize_topics(
-        custom_labels=True,
-        width=1000,
-        height=850
-    )
+    if (
+        topic_model.topic_embeddings_ is None
+        or len(topic_model.topic_embeddings_) < 2
+    ):
+        print("WARNING: Not enough topics to visualize — using fallback.")
+        topic_map_html = "<p><i>Not enough distinct topics today to generate a map.</i></p>"
 
-    # ===== Modern color palette (Version 6) =====
-    pastel_palette = [
-        "#7DA1C4", "#A3C4BC", "#D7E3E7",
-        "#C4A287", "#E8D7C1", "#9BA6B2",
-        "#C3BABA", "#8E9AAF", "#B8CBD0",
-    ]
+    else:
+        print("Generating upgraded topic map...")
 
-    # assign colors cycling through pastel palette
-    num_points = len(fig.data[0].x)
-    fig.data[0].marker.color = [
-        pastel_palette[i % len(pastel_palette)] for i in range(num_points)
-    ]
-
-    # ===== Bigger bubbles (executive look) =====
-    fig.data[0].marker.size = [55] * num_points
-    fig.data[0].marker.opacity = 0.88
-    fig.data[0].marker.line.width = 1
-    fig.data[0].marker.line.color = "#444"
-
-    # ===== Hover tooltips =====
-    fig.data[0].text = hover_texts
-    fig.data[0].hovertemplate = "%{text}<extra></extra>"
-
-    # ===== Add labels next to bubbles =====
-    for i, label in enumerate(custom_labels):
-        x = fig.data[0].x[i]
-        y = fig.data[0].y[i]
-
-        fig.add_annotation(
-            x=x,
-            y=y,
-            text=f"<b>{label}</b>",
-            showarrow=False,
-            font=dict(size=15, color="#222"),
-            xanchor="left",
-            yanchor="middle"
+        fig = topic_model.visualize_topics(
+            custom_labels=True,
+            width=1000,
+            height=850
         )
 
-    # Convert map to HTML snippet
-    topic_map_html = fig.to_html(full_html=False, include_plotlyjs="cdn")
+        pastel_palette = [
+            "#7DA1C4", "#A3C4BC", "#D7E3E7",
+            "#C4A287", "#E8D7C1", "#9BA6B2",
+            "#C3BABA", "#8E9AAF", "#B8CBD0",
+        ]
+
+        num_points = len(fig.data[0].x)
+        fig.data[0].marker.color = [
+            pastel_palette[i % len(pastel_palette)]
+            for i in range(num_points)
+        ]
+
+        fig.data[0].marker.size = [55] * num_points
+        fig.data[0].marker.opacity = 0.88
+        fig.data[0].marker.line.width = 1
+        fig.data[0].marker.line.color = "#444"
+
+        fig.data[0].text = hover_texts
+        fig.data[0].hovertemplate = "%{text}<extra></extra>"
+
+        for i, label in enumerate(custom_labels):
+            x = fig.data[0].x[i]
+            y = fig.data[0].y[i]
+            fig.add_annotation(
+                x=x,
+                y=y,
+                text=f"<b>{label}</b>",
+                showarrow=False,
+                font=dict(size=15, color="#222"),
+                xanchor="left",
+                yanchor="middle"
+            )
+
+        topic_map_html = fig.to_html(
+            full_html=False,
+            include_plotlyjs="cdn"
+        )
 
     # ------------------------------------------------------------
-    # 4. Resized barchart (no horizontal scrolling)
+    # 4. Resized barchart
     # ------------------------------------------------------------
     barchart_fig = topic_model.visualize_barchart(
         top_n_topics=NUM_TOPICS_FOR_LDA,
@@ -152,7 +159,7 @@ def generate_dashboard():
     )
 
     # ------------------------------------------------------------
-    # 5. Build Dashboard HTML (same layout as V4/V5)
+    # 5. Dashboard HTML
     # ------------------------------------------------------------
     timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -202,13 +209,9 @@ def generate_dashboard():
             border-radius: 8px;
             border: 1px solid #ddd;
         }}
-
-        h2 {{
-            margin-top: 0;
-        }}
     </style>
-</head>
 
+</head>
 <body>
 
 <div class="header">
@@ -229,10 +232,8 @@ def generate_dashboard():
         <h2>Topic Summaries (GPT)</h2>
 """
 
-    # Write summaries
     for tid in sorted(topic_summaries.keys()):
         s = topic_summaries[tid]
-
         html += f"""
         <div class="topic-block">
             <h3>Topic {tid}: {s['label']}</h3>
@@ -253,11 +254,11 @@ def generate_dashboard():
 </html>
 """
 
-    out_file = os.path.join(OUTPUT_DIR, "index.html")
-    with open(out_file, "w", encoding="utf-8") as f:
+    out_path = os.path.join(OUTPUT_DIR, "index.html")
+    with open(out_path, "w", encoding="utf-8") as f:
         f.write(html)
 
-    print(f"Dashboard created → {out_file}")
+    print(f"Dashboard created → {out_path}")
 
 
 if __name__ == "__main__":
