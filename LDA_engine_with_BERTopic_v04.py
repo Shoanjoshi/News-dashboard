@@ -139,7 +139,7 @@ def fetch_articles(max_articles):
 #                  BERTOPIC TOPIC MODELING (FIX 6)
 # =====================================================================
 
-def build_bertopic_model(texts, num_topics=10):
+def build_bertopic_model(texts, num_topics=5):
     """
     Build a BERTopic model over the raw article texts.
 
@@ -294,3 +294,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
