@@ -13,10 +13,9 @@ from LDA_engine_with_BERTopic_v04 import (
 OUTPUT_DIR = "dashboard"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-
 def generate_dashboard():
     # ------------------------------------------------------------
-    # 1. Run full pipeline
+    # 1. Full pipeline (same as v04)
     # ------------------------------------------------------------
     print("Fetching articles...")
     articles = fetch_articles(MAX_ARTICLES_TO_FETCH)
@@ -28,21 +27,96 @@ def generate_dashboard():
     )
 
     print("Generating LLM topic summaries...")
-    topic_summaries = interpret_topics(topic_model, texts)
+    topic_summaries_raw = interpret_topics(topic_model, texts)
+
+    # Parse JSON outputs into Python dicts
+    topic_summaries = {}
+    for tid, summary_json in topic_summaries_raw.items():
+        try:
+            topic_summaries[tid] = json.loads(summary_json)
+        except:
+            topic_summaries[tid] = {
+                "topic_id": tid,
+                "label": f"Topic {tid}",
+                "description": summary_json,
+                "subthemes": []
+            }
 
     # ------------------------------------------------------------
-    # 2. Generate BERTopic HTML (topic map)
+    # 2. Build better visualization metadata
     # ------------------------------------------------------------
-    # BERTopic uses Plotly under the hood; we embed the HTML snippet
-    vis_fig = topic_model.visualize_topics()
-    lda_html_embedded = vis_fig.to_html(full_html=False, include_plotlyjs="cdn")
+    doc_info = topic_model.get_document_info(texts)
+    topic_info = topic_model.get_topic_info()
+
+    # Only real topics (no -1)
+    valid_topics = topic_info[topic_info["Topic"] != -1]["Topic"].tolist()
+
+    hover_texts = []
+    custom_labels = []
+
+    for tid in valid_topics:
+        # GPT label
+        label = topic_summaries[tid]["label"]
+
+        # Top words
+        top_words = topic_model.get_topic(tid)
+        top_words_text = ", ".join([w[0] for w in top_words[:5]]) if top_words else ""
+
+        # Top 3 headlines
+        df_t = (
+            doc_info[doc_info["Topic"] == tid]
+            .sort_values("Probability", ascending=False)
+            .head(3)
+        )
+        headlines = []
+        for idx in df_t.index:
+            title = articles[idx]["title"]
+            if title:
+                headlines.append(title)
+
+        headlines_text = "; ".join(headlines) if headlines else "No headline"
+
+        # Combined hover
+        hover_texts.append(
+            f"<b>{label}</b><br>"
+            f"<b>Top words:</b> {top_words_text}<br>"
+            f"<b>Headlines:</b> {headlines_text}"
+        )
+
+        custom_labels.append(label)
 
     # ------------------------------------------------------------
-    # 3. Generate full HTML dashboard
+    # 3. Nicer BERTopic map (same position / layout)
+    # ------------------------------------------------------------
+    fig = topic_model.visualize_topics(
+        custom_labels=True,
+        width=900,
+        height=800
+    )
+
+    # Inject hover text
+    fig.data[0].text = hover_texts
+    fig.data[0].hovertemplate = "%{text}<extra></extra>"
+
+    # Convert to embeddable HTML snippet
+    topic_map_html = fig.to_html(full_html=False, include_plotlyjs="cdn")
+
+    # ------------------------------------------------------------
+    # OPTIONAL: Add barchart of top words
+    # ------------------------------------------------------------
+    barchart_fig = topic_model.visualize_barchart(
+        top_n_topics=NUM_TOPICS_FOR_LDA,
+        width=900,
+        height=600
+    )
+    barchart_html = barchart_fig.to_html(full_html=False, include_plotlyjs=False)
+
+    # ------------------------------------------------------------
+    # 4. Build the same HTML dashboard as before
     # ------------------------------------------------------------
     timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
-    final_html = f"""
+    html = f"""
 <html>
 <head>
     <title>Daily News Topic Dashboard (BERTopic + GPT)</title>
@@ -94,7 +168,6 @@ def generate_dashboard():
     </style>
 
 </head>
-
 <body>
 
 <div class="header">
@@ -103,36 +176,37 @@ def generate_dashboard():
 
 <div class="main-container">
 
-    <!-- LEFT SIDE: BERTopic MAP -->
+    <!-- Left: Upgraded BERTopic map -->
     <div class="left-panel">
         <h2>BERTopic Topic Map</h2>
-        {lda_html_embedded}
+        {topic_map_html}
+
+        <h2>Top Words per Topic</h2>
+        {barchart_html}
     </div>
 
-    <!-- RIGHT SIDE: GPT TOPIC SUMMARIES -->
+    <!-- Right: GPT summaries -->
     <div class="right-panel">
         <h2>Topic Summaries (GPT)</h2>
 """
 
-    # Append each topic summary in HTML
-    for tid, summary_json in topic_summaries.items():
-        data = json.loads(summary_json)
+    # Insert summaries
+    for tid in sorted(topic_summaries.keys()):
+        s = topic_summaries[tid]
 
-        final_html += f"""
+        html += f"""
         <div class="topic-block">
-            <h3>Topic {tid}: {data['label']}</h3>
-
-            <p>{data['description']}</p>
+            <h3>Topic {tid}: {s['label']}</h3>
+            <p>{s['description']}</p>
 
             <b>Subthemes:</b>
             <ul>
-                {''.join(f"<li>{st}</li>" for st in data['subthemes'])}
+                {''.join(f"<li>{st}</li>" for st in s['subthemes'])}
             </ul>
         </div>
         """
 
-    # Close final HTML
-    final_html += """
+    html += """
     </div>
 </div>
 
@@ -140,15 +214,12 @@ def generate_dashboard():
 </html>
 """
 
-    # ------------------------------------------------------------
-    # 4. Save dashboard
-    # ------------------------------------------------------------
-    output_file = os.path.join(OUTPUT_DIR, "index.html")
+    # Save file
+    out_file = os.path.join(OUTPUT_DIR, "index.html")
+    with open(out_file, "w", encoding="utf-8") as f:
+        f.write(html)
 
-    with open(output_file, "w", encoding="utf-8") as f:
-        f.write(final_html)
-
-    print(f"Dashboard created → {output_file}")
+    print(f"Dashboard created → {out_file}")
 
 
 if __name__ == "__main__":
