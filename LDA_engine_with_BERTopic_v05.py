@@ -1,10 +1,9 @@
 # ============================
 # LDA_engine_with_BERTopic_v05.py
-# Restored stable Version 5
+# Version 5.1 – stabilized topic generation
 # ============================
 
 import feedparser
-import requests
 from newspaper import Article
 from bertopic import BERTopic
 from openai import OpenAI
@@ -15,34 +14,39 @@ client = OpenAI()
 def fetch_articles(rss_urls):
     articles = []
     for url in rss_urls:
-        feed = feedparser.parse(url)
-        for entry in feed.entries:
-            link = entry.link
-            try:
-                art = Article(link)
-                art.download()
-                art.parse()
-                if len(art.text) > 300:  # ensures enough content
-                    articles.append(art.text)
-            except:
-                pass
+        try:
+            feed = feedparser.parse(url)
+            for entry in feed.entries:
+                link = entry.link
+                try:
+                    art = Article(link)
+                    art.download()
+                    art.parse()
+                    if len(art.text) > 300:
+                        articles.append(art.text)
+                except:
+                    pass
+        except:
+            pass
     return articles
 
 
-# ------------ Topic Model ----------------
-def run_topic_model(texts, nr_topics=5):
+# ------------ Topic Model (Stable v5.1) ---------------
+def run_topic_model(texts):
     """
-    Version 5 logic:
-    - Use BERTopic default behavior
-    - DO NOT override UMAP
-    - DO NOT force min_topic_size
-    - DO NOT force fixed topic count
+    Version 5.1 topic model settings:
+    - Allow BERTopic to naturally determine number of topics
+    - Force clusters of at least 5 docs
+    - Calculate probabilities for cleaner separation
+    - DO NOT set nr_topics=5 (causes reduction errors)
     """
 
     topic_model = BERTopic(
         language="english",
-        calculate_probabilities=False,
-        nr_topics=nr_topics
+        min_topic_size=5,             # Ensures diversity → stable topic count
+        calculate_probabilities=True, # Helps topic formation
+        nr_topics=None,               # Let model discover #topics instead of forcing
+        verbose=True
     )
 
     topics, _ = topic_model.fit_transform(texts)
@@ -51,25 +55,21 @@ def run_topic_model(texts, nr_topics=5):
 
 # ------------ GPT Topic Summaries --------
 def summarize_topic_gpt(topic_id, top_words, sample_docs):
-    """
-    GPT topic labeling (stable).
-    """
-
     prompt = f"""
-You are an expert news analyst.
+You are a senior news analyst.
 
-Here are the top words for a topic:
+Top words for topic {topic_id}:
 {top_words}
 
-Here are sample documents:
+Example documents:
 {sample_docs[:2]}
 
-Give a short name for this topic (max 6 words), 
-and a 2–3 sentence explanation of what the topic is about.
+Give:
+1. A short title (max 6 words)
+2. A 2–3 sentence explanation
 
 Return in JSON with keys: title, summary.
 """
-
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
