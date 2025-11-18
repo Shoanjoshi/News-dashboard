@@ -1,6 +1,6 @@
 # ============================
 # LDA_engine_with_BERTopic_v05.py
-# Version 5.1 – stabilized topic generation
+# Version 5.1 – Stabilized topic extraction
 # ============================
 
 import feedparser
@@ -8,10 +8,12 @@ from newspaper import Article
 from bertopic import BERTopic
 from openai import OpenAI
 
+# OpenAI Client
 client = OpenAI()
 
 # ------------ RSS Fetcher ---------------
 def fetch_articles(rss_urls):
+    """Fetches news articles from RSS feeds."""
     articles = []
     for url in rss_urls:
         try:
@@ -22,9 +24,11 @@ def fetch_articles(rss_urls):
                     art = Article(link)
                     art.download()
                     art.parse()
+                    # Ensure sufficient content
                     if len(art.text) > 300:
                         articles.append(art.text)
                 except:
+                    # Ignore failures
                     pass
         except:
             pass
@@ -35,17 +39,16 @@ def fetch_articles(rss_urls):
 def run_topic_model(texts):
     """
     Version 5.1 topic model settings:
-    - Allow BERTopic to naturally determine number of topics
-    - Force clusters of at least 5 docs
-    - Calculate probabilities for cleaner separation
-    - DO NOT set nr_topics=5 (causes reduction errors)
+    - Let BERTopic automatically determine number of topics.
+    - Enforce cluster minimum size for stability.
+    - Use probabilities to maintain separation quality.
     """
 
     topic_model = BERTopic(
         language="english",
-        min_topic_size=5,             # Ensures diversity → stable topic count
-        calculate_probabilities=True, # Helps topic formation
-        nr_topics=None,               # Let model discover #topics instead of forcing
+        min_topic_size=5,            # Helps prevent collapsing into 1 topic
+        calculate_probabilities=True,
+        nr_topics=None,              # Allow natural clustering
         verbose=True
     )
 
@@ -55,8 +58,13 @@ def run_topic_model(texts):
 
 # ------------ GPT Topic Summaries --------
 def summarize_topic_gpt(topic_id, top_words, sample_docs):
+    """
+    Generate a human-readable topic label + summary using GPT.
+    Output format: JSON with keys title and summary.
+    """
+
     prompt = f"""
-You are a senior news analyst.
+You are an expert news analyst.
 
 Top words for topic {topic_id}:
 {top_words}
@@ -64,16 +72,17 @@ Top words for topic {topic_id}:
 Example documents:
 {sample_docs[:2]}
 
-Give:
-1. A short title (max 6 words)
-2. A 2–3 sentence explanation
+Give a short topic name (max 6 words) and a 2–3 sentence explanation.
 
-Return in JSON with keys: title, summary.
+Return JSON format:
+{{ "title": "...", "summary": "..." }}
 """
+
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
     )
 
-    return response.choices[0].message["content"]
+    # 🔧 FIX APPLIED – Correct way to access GPT output
+    return response.choices[0].message.content
