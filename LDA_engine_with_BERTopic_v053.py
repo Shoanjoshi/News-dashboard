@@ -25,10 +25,58 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # 2️⃣ RSS Sources
 # --------------------------------------------
 RSS_FEEDS = [
-    "http://feeds.bbci.co.uk/news/rss.xml",
-    "https://rss.cnn.com/rss/edition.rss",
-    "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
-    "https://www.reutersagency.com/feed/?best-sectors=world&post_type=best"
+    # 1) REUTERS
+    "https://feeds.reuters.com/reuters/businessNews",
+    "https://feeds.reuters.com/reuters/worldNews",
+    "https://feeds.reuters.com/reuters/USbusinessNews",
+    "https://feeds.reuters.com/reuters/technologyNews",
+    "https://feeds.reuters.com/reuters/environment",
+    "https://feeds.reuters.com/reuters/politicsNews",
+    "https://feeds.reuters.com/reuters/companyNews",
+
+    # 2) AP NEWS
+    "https://apnews.com/apf-news",
+    "https://apnews.com/apf-topnews",
+    "https://apnews.com/apf-business",
+    "https://apnews.com/apf-worldnews",
+    "https://apnews.com/apf-technology",
+
+    # 3) BBC
+    "http://feeds.bbci.co.uk/news/world/rss.xml",
+    "http://feeds.bbci.co.uk/news/business/rss.xml",
+    "http://feeds.bbci.co.uk/news/technology/rss.xml",
+    "http://feeds.bbci.co.uk/news/politics/rss.xml",
+    "http://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
+
+    # 4) CNN
+    "http://rss.cnn.com/rss/edition_world.rss",
+    "http://rss.cnn.com/rss/edition_business.rss",
+    "http://rss.cnn.com/rss/edition_technology.rss",
+    "http://rss.cnn.com/rss/money_latest.rss",
+
+    # 5) MarketWatch
+    "https://feeds.marketwatch.com/marketwatch/topstories/",
+    "https://feeds.marketwatch.com/marketwatch/marketpulse/",
+    "https://feeds.marketwatch.com/marketwatch/realtimeheadlines/",
+
+    # 6) CNBC
+    "https://www.cnbc.com/id/100003114/device/rss/rss.html",
+    "https://www.cnbc.com/id/10001147/device/rss/rss.html",
+    "https://www.cnbc.com/id/15839069/device/rss/rss.html",
+    "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+    "https://www.cnbc.com/id/100727362/device/rss/rss.html",
+
+    # 7) Guardian
+    "https://www.theguardian.com/world/rss",
+    "https://www.theguardian.com/business/rss",
+    "https://www.theguardian.com/commentisfree/rss",
+    "https://www.theguardian.com/environment/rss",
+    "https://www.theguardian.com/us-news/rss",
+
+    # 8) Yahoo Finance
+    "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC",
+    "https://www.yahoo.com/news/rss",
+    "https://finance.yahoo.com/news/rssindex",
 ]
 
 # --------------------------------------------
@@ -75,7 +123,7 @@ def summarize_topic_gpt(topic_id, words, docs):
         response = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=350,
+            max_completion_tokens=350,
             temperature=0.35
         )
         return response.choices[0].message.content
@@ -154,3 +202,4 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
