@@ -1,0 +1,73 @@
+!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Daily News Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            display: flex;
+            flex-direction: row;
+        }
+
+        .left-panel {
+            width: 50%;
+            padding-right: 20px;
+        }
+
+        .right-panel {
+            width: 50%;
+            padding-left: 20px;
+        }
+
+        .summary-section {
+            margin-bottom: 25px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+
+        .chart-container {
+            margin-bottom: 25px;
+        }
+
+        .topic-title {
+            font-weight: bold;
+            color: #003366;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LEFT SIDE (Topic Map + Barchart) -->
+    <div class="left-panel">
+        <h2>🗺 Topic Distance Map</h2>
+        <div class="chart-container">
+            {{ topic_map | safe }}
+        </div>
+
+        <h2>📊 Topic Keywords</h2>
+        <div class="chart-container">
+            {{ barchart | safe }}
+        </div>
+    </div>
+
+    <!-- RIGHT SIDE (LLM Summaries) -->
+    <div class="right-panel">
+        <h2>📝 Topic Summaries</h2>
+        {% for item in summaries %}
+            <div class="summary-section">
+                <p class="topic-title">Topic {{ item.topic_id }}</p>
+                <p>{{ item.summary | safe }}</p>
+            </div>
+        {% endfor %}
+    </div>
+
+</body>
+</html>
