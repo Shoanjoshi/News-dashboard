@@ -1,110 +1,84 @@
-# =====================================
-# generate_dashboard.py — Version 5.1
-# =====================================
+# ============================================
+# 📄 generate_dashboard.py
+# Version 5.3 – Stable dashboard with GPT-5-nano & fallback visualizations
+# ============================================
 
 import os
 import json
-from LDA_engine_with_BERTopic_v05 import (
-    fetch_articles,
-    run_topic_model,
-    summarize_topic_gpt,
-)
+from jinja2 import Environment, FileSystemLoader
 
-import plotly.express as px
-import plotly.graph_objects as go
+from LDA_engine_with_BERTopic_v053 import generate_topic_results
 
-# -------------------------------
-# STEP 1: Fetch articles
-# -------------------------------
-RSS_FEEDS = [
-    "http://feeds.bbci.co.uk/news/rss.xml",
-    "https://rss.cnn.com/rss/edition.rss",
-    "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
-    "https://www.reutersagency.com/feed/?best-sectors=world&post_type=best",
-]
+# Ensure OpenAI key exists
+if not os.getenv("OPENAI_API_KEY"):
+    raise ValueError("⚠️ OPENAI_API_KEY not found. Add it as a GitHub Secret.")
 
-print("Fetching articles...")
-texts = fetch_articles(RSS_FEEDS)
-texts = texts[:50]  # cap to prevent instability
+# Output directory for dashboard export
+OUTPUT_DIR = "dashboard"
+os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-if len(texts) < 10:
-    texts += [" filler content "] * (10 - len(texts))
-    print("Low content – padded with placeholders.")
+def generate_dashboard():
+    print("🚀 Starting dashboard generation...")
+
+    # 1️⃣ Run topic modeling and summarization
+    docs, topic_summaries, topic_model = generate_topic_results()
+
+    # If no documents or no model → fallback simple dashboard
+    if not docs or not topic_model:
+        print("⚠️ Not enough data for full dashboard. Using fallback layout.")
+        html_content = "<h3>No sufficient data to generate dashboard today.</h3>"
+        with open(os.path.join(OUTPUT_DIR, "index.html"), "w", encoding="utf-8") as f:
+            f.write(html_content)
+        print("🟡 Dashboard generated with fallback content.")
+        return
+
+    # 2️⃣ Prepare topic visualization
+    print("📊 Building visualizations...")
+
+    try:
+        # Plot topic distance map (bubble chart)
+        fig_topics = topic_model.visualize_topics(width=600, height=650)
+    except Exception as e:
+        print(f"⚠️ Unable to build topic map. Reason: {e}")
+        fig_topics = None
+
+    try:
+        # Barchart: keyword distributions
+        fig_barchart = topic_model.visualize_barchart(top_n_topics=5)
+    except Exception as e:
+        print(f"⚠️ Unable to build barchart. Reason: {e}")
+        fig_barchart = None
+
+    # 3️⃣ Convert graphs to HTML
+    html_topic_map = fig_topics.to_html(full_html=False) if fig_topics else "<p>No topic map available.</p>"
+    html_barchart = fig_barchart.to_html(full_html=False) if fig_barchart else "<p>No bar chart available.</p>"
+
+    # 4️⃣ Export topic summaries
+    summary_list = [
+        {"topic_id": k, "summary": v.replace("\n", "<br>")}
+        for k, v in topic_summaries.items()
+    ]
+
+    # 5️⃣ Render dashboard via Jinja2 template
+    env = Environment(loader=FileSystemLoader("templates"))
+    template = env.get_template("dashboard_template.html")
+
+    rendered_html = template.render(
+        topic_map=html_topic_map,
+        barchart=html_barchart,
+        summaries=summary_list,
+    )
+
+    # 6️⃣ Write to HTML
+    output_path = os.path.join(OUTPUT_DIR, "index.html")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(rendered_html)
+
+    print(f"🎉 Dashboard successfully generated → {output_path}")
 
 
-# -------------------------------
-# STEP 2: Run BERTopic
-# -------------------------------
-print("Running BERTopic...")
-topic_model, topics = run_topic_model(texts)
-topic_info = topic_model.get_topic_info()
-
-# Filter valid topics
-valid_topics = [t for t in topic_info["Topic"] if t != -1]
-print(f"Detected {len(valid_topics)} valid topics.")
-
-
-# -------------------------------
-# STEP 3: GPT summaries
-# -------------------------------
-print("Generating GPT summaries...")
-topic_summaries = []
-
-for topic_id in valid_topics[:5]:  # limit to first 5 topics
-    words = [w for w, _ in topic_model.get_topic(topic_id)]
-    docs = [texts[i] for i, t in enumerate(topics) if t == topic_id][:3]
-    summary_json = summarize_topic_gpt(topic_id, words, docs)
-
-    topic_summaries.append({
-        "topic": topic_id,
-        "summary": summary_json
-    })
-
-
-# -------------------------------
-# STEP 4: Safe visualizations
-# -------------------------------
-print("Building visualizations...")
-
-if len(valid_topics) < 2:
-    print("WARNING: Not enough distinct topics for visualization.")
-    fig_topics = "<p><b>No topic map available (only one topic).</b></p>"
-    fig_bars = "<p><b>No barchart available.</b></p>"
-else:
-    fig_topics = topic_model.visualize_topics(width=600, height=700)
-    fig_bars = topic_model.visualize_barchart(width=600, height=700)
-
-
-# -------------------------------
-# STEP 5: Build HTML
-# -------------------------------
-print("Building HTML...")
-
-html_output = f"""
-<html>
-<head>
-<title>News Topic Dashboard</title>
-</head>
-<body>
-
-<h1>Daily News Topics</h1>
-
-<h2>Topic Map</h2>
-{fig_topics if isinstance(fig_topics, str) else fig_topics.to_html(include_plotlyjs='cdn')}
-
-<h2>Topic Summaries</h2>
-<pre>{json.dumps(topic_summaries, indent=2)}</pre>
-
-<h2>Topic Barchart</h2>
-{fig_bars if isinstance(fig_bars, str) else fig_bars.to_html(include_plotlyjs='cdn')}
-
-</body>
-</html>
-"""
-
-os.makedirs("dashboard", exist_ok=True)
-
-with open("dashboard/index.html", "w", encoding="utf-8") as f:
-    f.write(html_output)
-
-print("Dashboard generated successfully → dashboard/index.html")
+# --------------------------------------------
+# Run when executed manually
+# --------------------------------------------
+if __name__ == "__main__":
+    generate_dashboard()
