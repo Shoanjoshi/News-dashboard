@@ -2,7 +2,6 @@ import feedparser
 from newspaper import Article
 import nltk
 import ssl
-import requests
 from bertopic import BERTopic
 from sentence_transformers import SentenceTransformer
 from openai import OpenAI
@@ -10,17 +9,16 @@ import json
 import time
 
 # ------------------------------------------------------------
-# Fix B: Fetch more articles → more stable BERTopic clustering
+# Fetch more articles → more stable BERTopic clustering
 # ------------------------------------------------------------
-MAX_ARTICLES_TO_FETCH = 150     # was 60
-NUM_TOPICS_FOR_LDA = 12         # used only for LLM summaries
+MAX_ARTICLES_TO_FETCH = 150    
 
 # ------------------------------------------------------------
 # OpenAI client initialization
 # ------------------------------------------------------------
 client = OpenAI()
 
-# Fix for SSL (newspaper3k sometimes fails without this)
+# Fix for SSL (newspaper)
 try:
     _create_unverified_https_context = ssl._create_unverified_context
 except AttributeError:
@@ -32,7 +30,7 @@ nltk.download("punkt", quiet=True)
 
 
 # ------------------------------------------------------------
-# Fetch & parse RSS feeds
+# RSS feeds
 # ------------------------------------------------------------
 RSS_FEEDS = [
     "http://feeds.bbci.co.uk/news/rss.xml",
@@ -77,14 +75,17 @@ def fetch_articles(max_articles=MAX_ARTICLES_TO_FETCH):
 
 
 # ------------------------------------------------------------
-# Fix C: Let BERTopic choose the optimal number of topics
+# VERSION 6.3 FIX:
+# Force BERTopic to always output EXACTLY 5 topics
 # ------------------------------------------------------------
 def build_bertopic_model(texts):
-    # Use a more stable embedding model
+
     embedding_model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
     topic_model = BERTopic(
         embedding_model=embedding_model,
+        nr_topics=5,           # ← FIXED TOPIC COUNT (Version 6.3)
+        min_topic_size=10,     # stability improvement
         verbose=True
     )
 
@@ -93,16 +94,16 @@ def build_bertopic_model(texts):
 
 
 # ------------------------------------------------------------
-# GPT-based topic interpretation
+# GPT topic interpretation
 # ------------------------------------------------------------
 TOPIC_PROMPT = """
 You are an expert analyst. The following text documents belong to Topic {topic_id}.
 Your task:
-1. Assign a short, human-readable label to this topic (5 words or fewer).
-2. Write a concise 2–3 sentence description of the topic.
+1. Assign a short, human-readable label (≤ 5 words).
+2. Write a concise 2–3 sentence description.
 3. List 2–4 subthemes in bullet form.
 
-Respond ONLY with valid JSON using keys:
+Respond ONLY in valid JSON with keys:
 label, description, subthemes
 """
 
@@ -132,9 +133,9 @@ def interpret_topics(topic_model, texts):
             docs.append(texts[idx][:1000])
 
         joined_text = "\n\n".join(docs)
-
         prompt = TOPIC_PROMPT.format(topic_id=tid) + "\n\nDocuments:\n" + joined_text
 
+        # 3 retry attempts
         success = False
         for attempt in range(3):
             try:
