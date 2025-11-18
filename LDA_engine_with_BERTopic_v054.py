@@ -27,11 +27,11 @@ RSS_FEEDS = [
     # 📈 Global Business & Economy
     "https://feeds.reuters.com/reuters/businessNews",
     "https://feeds.reuters.com/reuters/markets",
-    "https://www.ft.com/rss/home/us",                 # Financial Times – US
-    "https://www.ft.com/rss/home/europe",             # Financial Times – Europe
-    "https://www.ft.com/rss/home/asia",               # Financial Times – Asia
-    "https://www.wsj.com/xml/rss/3_7014.xml",         # WSJ - Business
-    "https://www.wsj.com/xml/rss/3_7085.xml",         # WSJ - Markets
+    "https://www.ft.com/rss/home/us",
+    "https://www.ft.com/rss/home/europe",
+    "https://www.ft.com/rss/home/asia",
+    "https://www.wsj.com/xml/rss/3_7014.xml",
+    "https://www.wsj.com/xml/rss/3_7085.xml",
 
     # 💰 Banking, Private Credit, Finance
     "https://www.bloomberg.com/feeds/podcast/etf.xml",
@@ -51,7 +51,7 @@ RSS_FEEDS = [
     # 🏦 Asia & Emerging Markets
     "https://asia.nikkei.com/rss/feed",
     "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
-    "https://www.scmp.com/rss/91/feed",       # China/Asia business
+    "https://www.scmp.com/rss/91/feed",
 
     # 🇪🇺 Europe Economy
     "https://www.euronews.com/rss?level=theme&name=business",
@@ -70,7 +70,7 @@ RSS_FEEDS = [
 # --------------------------------------------
 def clean_text(text):
     text = re.sub(r'\s+', ' ', str(text)).strip()
-    text = re.sub(r'<[^>]+>', '', str(text))  # remove HTML tags
+    text = re.sub(r'<[^>]+>', '', str(text))
     return text
 
 def fetch_articles():
@@ -81,7 +81,7 @@ def fetch_articles():
             for entry in parsed_feed.entries:
                 if hasattr(entry, "summary") and hasattr(entry, "title"):
                     clean_article = clean_text(entry.title + " " + entry.summary)
-                    if len(clean_article.split()) > 8:  # filter very short entries
+                    if len(clean_article.split()) > 8:
                         articles.append(clean_article)
         except Exception:
             continue
@@ -93,32 +93,52 @@ def fetch_articles():
     return articles
 
 # --------------------------------------------
-# 4️⃣ GPT Summarization (GPT-5-nano)
+# 4️⃣ GPT Summarization (Improved Logic)
 # --------------------------------------------
 def summarize_topic_gpt(topic_id, words, docs):
+    snippet_text = "\n".join(f"- {d[:200]}..." for d in docs[:3])
+
     prompt = (
-        f"You are an expert global news analyst.\n"
-        f"• Topic ID: {topic_id}\n"
-        f"• Key Terms: {', '.join(words[:10])}\n"
-        f"• Sample Snippets:\n" +
-        "\n".join(f"- {d[:200]}..." for d in docs[:3]) +
-        "\n\nWrite:\n- 1 sentence summary of the topic\n- Topic title (max 5 words, uppercase)"
+        "You are a professional risk manager ata global bank.\n"
+        "Write a clear topic summary based on key terms and example snippets.\n"
+        "STRICT FORMAT:\n"
+        "TITLE: <UPPERCASE MAX 5 WORDS>\n"
+        "SUMMARY: <1 sentence explaining the topic>\n\n"
+        f"Topic ID: {topic_id}\n"
+        f"Key Terms: {', '.join(words[:10])}\n"
+        f"Example Snippets:\n{snippet_text}\n"
     )
 
     try:
         response = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=350,
-            temperature=0.35
+            max_completion_tokens=300,
+            temperature=0.25
         )
-        return response.choices[0].message.content
+        text = response.choices[0].message.content.strip()
+
+        if not text.startswith("TITLE:"):
+            return f"Topic {topic_id}: {', '.join(words[:5])} (fallback)"
+
+        return text
+
     except Exception as e:
-        print(f"⚠️ GPT error (fallback): {e}")
-        return f"Topic {topic_id}: {', '.join(words[:5])} (fallback)"
+        print(f"⚠️ GPT-5-nano error, trying fallback: {e}")
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[{"role": "user", "content": prompt}],
+                max_completion_tokens=300,
+                temperature=0.25
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e2:
+            print(f"⚠️ GPT fallback error: {e2}")
+            return f"Topic {topic_id}: {', '.join(words[:5])} (fallback)"
 
 # --------------------------------------------
-# 5️⃣ BERTopic Engine (Let Topics Form Naturally)
+# 5️⃣ BERTopic Engine (Natural Topic Clustering)
 # --------------------------------------------
 def run_bertopic_analysis(docs):
     print("🚀 Running BERTopic using natural clustering...")
@@ -132,14 +152,14 @@ def run_bertopic_analysis(docs):
     )
 
     hdbscan_model = HDBSCAN(
-        min_cluster_size=8,  # 🔹 ensures solid topic clusters
+        min_cluster_size=8,
         min_samples=1
     )
 
     topic_model = BERTopic(
         umap_model=umap_model,
         hdbscan_model=hdbscan_model,
-        nr_topics=None,  # 🔥 Natural topic discovery
+        nr_topics=None,
         top_n_words=15,
         verbose=True,
     )
@@ -173,7 +193,6 @@ def generate_topic_results():
             continue
         words = [t[0] for t in topic_model.get_topic(topic_id)]
         feat_docs = [docs[idx] for idx, t in enumerate(topics) if t == topic_id]
-
         if feat_docs:
             summary_dict[topic_id] = summarize_topic_gpt(topic_id, words, feat_docs)
         else:
