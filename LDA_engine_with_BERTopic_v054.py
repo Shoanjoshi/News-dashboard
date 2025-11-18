@@ -1,6 +1,6 @@
 # ============================================
-# 📄 LDA_engine_with_BERTopic_v053.py
-# Version 5.3 – Optimized with GPT-5-nano & stable topic control
+# 📄 LDA_engine_with_BERTopic_v054.py
+# Version 5.4 – Natural topic clustering & diversified RSS sources
 # ============================================
 
 import os
@@ -13,7 +13,6 @@ from openai import OpenAI
 from bertopic import BERTopic
 from hdbscan import HDBSCAN
 from umap import UMAP
-
 from sklearn.feature_extraction.text import CountVectorizer
 
 # --------------------------------------------
@@ -22,61 +21,48 @@ from sklearn.feature_extraction.text import CountVectorizer
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # --------------------------------------------
-# 2️⃣ RSS Sources
+# 2️⃣ Optimized & Diversified RSS Sources
 # --------------------------------------------
 RSS_FEEDS = [
-    # 1) REUTERS
+    # 📈 Global Business & Economy
     "https://feeds.reuters.com/reuters/businessNews",
-    "https://feeds.reuters.com/reuters/worldNews",
-    "https://feeds.reuters.com/reuters/USbusinessNews",
-    "https://feeds.reuters.com/reuters/technologyNews",
-    "https://feeds.reuters.com/reuters/environment",
-    "https://feeds.reuters.com/reuters/politicsNews",
-    "https://feeds.reuters.com/reuters/companyNews",
+    "https://feeds.reuters.com/reuters/markets",
+    "https://www.ft.com/rss/home/us",                 # Financial Times – US
+    "https://www.ft.com/rss/home/europe",             # Financial Times – Europe
+    "https://www.ft.com/rss/home/asia",               # Financial Times – Asia
+    "https://www.wsj.com/xml/rss/3_7014.xml",         # WSJ - Business
+    "https://www.wsj.com/xml/rss/3_7085.xml",         # WSJ - Markets
 
-    # 2) AP NEWS
-    "https://apnews.com/apf-news",
-    "https://apnews.com/apf-topnews",
-    "https://apnews.com/apf-business",
-    "https://apnews.com/apf-worldnews",
-    "https://apnews.com/apf-technology",
-
-    # 3) BBC
-    "http://feeds.bbci.co.uk/news/world/rss.xml",
-    "http://feeds.bbci.co.uk/news/business/rss.xml",
-    "http://feeds.bbci.co.uk/news/technology/rss.xml",
-    "http://feeds.bbci.co.uk/news/politics/rss.xml",
-    "http://feeds.bbci.co.uk/news/science_and_environment/rss.xml",
-
-    # 4) CNN
-    "http://rss.cnn.com/rss/edition_world.rss",
-    "http://rss.cnn.com/rss/edition_business.rss",
-    "http://rss.cnn.com/rss/edition_technology.rss",
-    "http://rss.cnn.com/rss/money_latest.rss",
-
-    # 5) MarketWatch
+    # 💰 Banking, Private Credit, Finance
+    "https://www.bloomberg.com/feeds/podcast/etf.xml",
+    "https://www.bloomberg.com/markets/economics.rss",
+    "https://www.bloomberg.com/feeds/bfm/podcast-odd-lots.xml",
     "https://feeds.marketwatch.com/marketwatch/topstories/",
     "https://feeds.marketwatch.com/marketwatch/marketpulse/",
-    "https://feeds.marketwatch.com/marketwatch/realtimeheadlines/",
 
-    # 6) CNBC
-    "https://www.cnbc.com/id/100003114/device/rss/rss.html",
-    "https://www.cnbc.com/id/10001147/device/rss/rss.html",
-    "https://www.cnbc.com/id/15839069/device/rss/rss.html",
-    "https://www.cnbc.com/id/10000664/device/rss/rss.html",
-    "https://www.cnbc.com/id/100727362/device/rss/rss.html",
+    # 🌍 World Politics & Geopolitics
+    "https://feeds.reuters.com/reuters/worldNews",
+    "https://feeds.reuters.com/reuters/politicsNews",
+    "https://www.aljazeera.com/xml/rss/all.xml",
+    "http://feeds.bbci.co.uk/news/world/rss.xml",
+    "http://feeds.bbci.co.uk/news/politics/rss.xml",
+    "http://rss.cnn.com/rss/edition_world.rss",
 
-    # 7) Guardian
+    # 🏦 Asia & Emerging Markets
+    "https://asia.nikkei.com/rss/feed",
+    "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
+    "https://www.scmp.com/rss/91/feed",       # China/Asia business
+
+    # 🇪🇺 Europe Economy
+    "https://www.euronews.com/rss?level=theme&name=business",
+    "https://www.economist.com/europe/rss.xml",
     "https://www.theguardian.com/world/rss",
     "https://www.theguardian.com/business/rss",
-    "https://www.theguardian.com/commentisfree/rss",
-    "https://www.theguardian.com/environment/rss",
-    "https://www.theguardian.com/us-news/rss",
 
-    # 8) Yahoo Finance
-    "https://feeds.finance.yahoo.com/rss/2.0/headline?s=^GSPC",
-    "https://www.yahoo.com/news/rss",
-    "https://finance.yahoo.com/news/rssindex",
+    # 🚀 Tech & Innovation
+    "https://feeds.reuters.com/reuters/technologyNews",
+    "https://www.techspot.com/backend.xml",
+    "https://feeds.feedburner.com/TechCrunch/",
 ]
 
 # --------------------------------------------
@@ -84,7 +70,7 @@ RSS_FEEDS = [
 # --------------------------------------------
 def clean_text(text):
     text = re.sub(r'\s+', ' ', str(text)).strip()
-    text = re.sub(r'<[^>]+>', '', str(text))  # remove HTML
+    text = re.sub(r'<[^>]+>', '', str(text))  # remove HTML tags
     return text
 
 def fetch_articles():
@@ -95,28 +81,28 @@ def fetch_articles():
             for entry in parsed_feed.entries:
                 if hasattr(entry, "summary") and hasattr(entry, "title"):
                     clean_article = clean_text(entry.title + " " + entry.summary)
-                    if len(clean_article.split()) > 5:
+                    if len(clean_article.split()) > 8:  # filter very short entries
                         articles.append(clean_article)
         except Exception:
             continue
 
-    if len(articles) < 8:
-        print("⚠️ Not enough valid articles. Skipping BERTopic…")
+    print(f"📰 Total collected articles: {len(articles)}")
+    if len(articles) < 10:
+        print("⚠️ Not enough valid articles. Skipping BERTopic.")
         return []
     return articles
 
 # --------------------------------------------
-# 4️⃣ GPT-5-nano Summary
+# 4️⃣ GPT Summarization (GPT-5-nano)
 # --------------------------------------------
 def summarize_topic_gpt(topic_id, words, docs):
     prompt = (
-        f"You are an expert news analyst.\n"
+        f"You are an expert global news analyst.\n"
         f"• Topic ID: {topic_id}\n"
         f"• Key Terms: {', '.join(words[:10])}\n"
-        f"• Article Snippets:\n"
-        + "\n".join(f"- {d[:200]}..." for d in docs[:3])
-        + "\n\nProvide:\n- A concise summary (1-2 sentences)\n"
-          "- A topic title (max 5 words, uppercase)."
+        f"• Sample Snippets:\n" +
+        "\n".join(f"- {d[:200]}..." for d in docs[:3]) +
+        "\n\nWrite:\n- 1 sentence summary of the topic\n- Topic title (max 5 words, uppercase)"
     )
 
     try:
@@ -128,14 +114,14 @@ def summarize_topic_gpt(topic_id, words, docs):
         )
         return response.choices[0].message.content
     except Exception as e:
-        print(f"⚠️ GPT error, fallback: {e}")
+        print(f"⚠️ GPT error (fallback): {e}")
         return f"Topic {topic_id}: {', '.join(words[:5])} (fallback)"
 
 # --------------------------------------------
-# 5️⃣ BERTopic Engine (Force 5 Topics)
+# 5️⃣ BERTopic Engine (Let Topics Form Naturally)
 # --------------------------------------------
 def run_bertopic_analysis(docs):
-    print("Running BERTopic…")
+    print("🚀 Running BERTopic using natural clustering...")
 
     umap_model = UMAP(
         n_neighbors=15,
@@ -146,14 +132,14 @@ def run_bertopic_analysis(docs):
     )
 
     hdbscan_model = HDBSCAN(
-        min_cluster_size=2,
+        min_cluster_size=8,  # 🔹 ensures solid topic clusters
         min_samples=1
     )
 
     topic_model = BERTopic(
         umap_model=umap_model,
         hdbscan_model=hdbscan_model,
-        nr_topics=5,  # Force 5 topics
+        nr_topics=None,  # 🔥 Natural topic discovery
         top_n_words=15,
         verbose=True,
     )
@@ -162,10 +148,10 @@ def run_bertopic_analysis(docs):
     return topic_model, topics, probs
 
 # --------------------------------------------
-# 6️⃣ Main runner
+# 6️⃣ Main Runner
 # --------------------------------------------
 def generate_topic_results():
-    print("Fetching articles…")
+    print("📡 Fetching articles...")
     docs = fetch_articles()
     if not docs:
         return [], {}, None
@@ -175,11 +161,12 @@ def generate_topic_results():
     summary_dict = {}
     topic_info = topic_model.get_topic_info()
 
-    if topic_info.shape[0] < 5:
-        print("⚠️ Not enough usable topics after clustering. Fallback summarization.")
-        for i in range(5):
-            summary_dict[i] = f"Topic {i}: Insufficient data"
+    if topic_info.shape[0] < 2:
+        print("⚠️ Not enough topics detected! Fallback...")
+        summary_dict[0] = "Not enough data for topic analysis"
         return docs, summary_dict, topic_model
+
+    print(f"🧠 Detected {topic_info.shape[0]} topics.")
 
     for topic_id in topic_info.Topic.head():
         if topic_id == -1:
@@ -195,11 +182,10 @@ def generate_topic_results():
     return docs, summary_dict, topic_model
 
 # --------------------------------------------
-# 7️⃣ For testing locally
+# 7️⃣ Test Only
 # --------------------------------------------
 if __name__ == "__main__":
     docs, summaries, model = generate_topic_results()
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
-
