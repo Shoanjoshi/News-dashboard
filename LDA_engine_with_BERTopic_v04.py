@@ -1,161 +1,79 @@
+# ============================
+# LDA_engine_with_BERTopic_v05.py
+# Restored stable Version 5
+# ============================
+
 import feedparser
+import requests
 from newspaper import Article
-import nltk
-import ssl
 from bertopic import BERTopic
-from sentence_transformers import SentenceTransformer
 from openai import OpenAI
-import json
-import time
 
-# ------------------------------------------------------------
-# Fetch more articles → more stable BERTopic clustering
-# ------------------------------------------------------------
-MAX_ARTICLES_TO_FETCH = 150    
-
-# ------------------------------------------------------------
-# OpenAI client initialization
-# ------------------------------------------------------------
 client = OpenAI()
 
-# Fix for SSL (newspaper)
-try:
-    _create_unverified_https_context = ssl._create_unverified_context
-except AttributeError:
-    pass
-else:
-    ssl._create_default_https_context = _create_unverified_https_context
-
-nltk.download("punkt", quiet=True)
-
-
-# ------------------------------------------------------------
-# RSS feeds
-# ------------------------------------------------------------
-RSS_FEEDS = [
-    "http://feeds.bbci.co.uk/news/rss.xml",
-    "https://rss.cnn.com/rss/edition.rss",
-    "https://feeds.a.dj.com/rss/RSSWorldNews.xml",
-    "https://www.reutersagency.com/feed/?best-sectors=world&post_type=best",
-]
-
-
-def fetch_articles(max_articles=MAX_ARTICLES_TO_FETCH):
+# ------------ RSS Fetcher ---------------
+def fetch_articles(rss_urls):
     articles = []
-    for feed_url in RSS_FEEDS:
-        print(f"Fetching RSS feed: {feed_url}")
-        feed = feedparser.parse(feed_url)
-
-        for entry in feed.entries[:50]:
-            url = entry.get("link")
-            if not url:
-                continue
-
+    for url in rss_urls:
+        feed = feedparser.parse(url)
+        for entry in feed.entries:
+            link = entry.link
             try:
-                art = Article(url)
+                art = Article(link)
                 art.download()
                 art.parse()
-
-                if len(art.text.strip()) < 200:
-                    continue
-
-                articles.append({
-                    "title": art.title,
-                    "text": art.text,
-                    "url": url
-                })
-
-                if len(articles) >= max_articles:
-                    return articles
-
-            except Exception:
-                continue
-
+                if len(art.text) > 300:  # ensures enough content
+                    articles.append(art.text)
+            except:
+                pass
     return articles
 
 
-# ------------------------------------------------------------
-# VERSION 6.3 FIX:
-# Force BERTopic to always output EXACTLY 5 topics
-# ------------------------------------------------------------
-def build_bertopic_model(texts):
-
-    embedding_model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
+# ------------ Topic Model ----------------
+def run_topic_model(texts, nr_topics=5):
+    """
+    Version 5 logic:
+    - Use BERTopic default behavior
+    - DO NOT override UMAP
+    - DO NOT force min_topic_size
+    - DO NOT force fixed topic count
+    """
 
     topic_model = BERTopic(
-        embedding_model=embedding_model,
-        nr_topics=5,           # ← FIXED TOPIC COUNT (Version 6.3)
-        min_topic_size=10,     # stability improvement
-        verbose=True
+        language="english",
+        calculate_probabilities=False,
+        nr_topics=nr_topics
     )
 
-    topics, probs = topic_model.fit_transform(texts)
-    return topic_model, topics, probs
+    topics, _ = topic_model.fit_transform(texts)
+    return topic_model, topics
 
 
-# ------------------------------------------------------------
-# GPT topic interpretation
-# ------------------------------------------------------------
-TOPIC_PROMPT = """
-You are an expert analyst. The following text documents belong to Topic {topic_id}.
-Your task:
-1. Assign a short, human-readable label (≤ 5 words).
-2. Write a concise 2–3 sentence description.
-3. List 2–4 subthemes in bullet form.
+# ------------ GPT Topic Summaries --------
+def summarize_topic_gpt(topic_id, top_words, sample_docs):
+    """
+    GPT topic labeling (stable).
+    """
 
-Respond ONLY in valid JSON with keys:
-label, description, subthemes
+    prompt = f"""
+You are an expert news analyst.
+
+Here are the top words for a topic:
+{top_words}
+
+Here are sample documents:
+{sample_docs[:2]}
+
+Give a short name for this topic (max 6 words), 
+and a 2–3 sentence explanation of what the topic is about.
+
+Return in JSON with keys: title, summary.
 """
 
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.3,
+    )
 
-def interpret_topics(topic_model, texts):
-    topic_info = topic_model.get_topic_info()
-    doc_info = topic_model.get_document_info(texts)
-
-    valid_topics = [
-        t for t in topic_info["Topic"].tolist()
-        if t != -1
-    ]
-
-    summaries = {}
-
-    for tid in valid_topics:
-        print(f"Processing Topic {tid} ...")
-
-        df_t = (
-            doc_info[doc_info["Topic"] == tid]
-            .sort_values("Probability", ascending=False)
-            .head(10)
-        )
-
-        docs = []
-        for idx in df_t.index:
-            docs.append(texts[idx][:1000])
-
-        joined_text = "\n\n".join(docs)
-        prompt = TOPIC_PROMPT.format(topic_id=tid) + "\n\nDocuments:\n" + joined_text
-
-        # 3 retry attempts
-        success = False
-        for attempt in range(3):
-            try:
-                response = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.4,
-                )
-                summaries[tid] = response.choices[0].message.content
-                success = True
-                break
-            except Exception as e:
-                print(f"Retrying topic {tid} due to error: {e}")
-                time.sleep(2)
-
-        if not success:
-            summaries[tid] = json.dumps({
-                "label": f"Topic {tid}",
-                "description": "Summary generation failed.",
-                "subthemes": []
-            })
-
-    return summaries
+    return response.choices[0].message["content"]
