@@ -22,11 +22,13 @@ hdbscan
 # Visualization
 matplotlib
 pyLDAvis  # optional now; can be removed if you're no longer using LDA
+plotly
 
 # NLP utilities
 nltk
 
 # OpenAI
 openai
+
 
 
