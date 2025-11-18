@@ -7,7 +7,7 @@ import os
 import json
 from jinja2 import Environment, FileSystemLoader
 
-from LDA_engine_with_BERTopic_v053 import generate_topic_results
+from LDA_engine_with_BERTopic_v054 import generate_topic_results
 
 # Ensure OpenAI key exists
 if not os.getenv("OPENAI_API_KEY"):
