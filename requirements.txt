@@ -1,34 +1,14 @@
-# News scraping
-newspaper3k
-feedparser
-requests
-beautifulsoup4
-
-# HTML parsing
-lxml
-lxml_html_clean
-
-# Core numerics / data
+bertopic
 numpy
 pandas
-scikit-learn
-
-# Topic modeling (BERTopic)
-bertopic
+openai
+feedparser
+newspaper3k
+plotly
 sentence-transformers
 umap-learn
 hdbscan
 
-# Visualization
-matplotlib
-pyLDAvis  # optional now;can be removed if you're no longer using LDA
-plotly
-
-# NLP utilities
-nltk
-
-# OpenAI
-openai
 
 
 
