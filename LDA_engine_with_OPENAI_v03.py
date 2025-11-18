@@ -1,20 +1,15 @@
 import feedparser
 from newspaper import Article
-import gensim
-import gensim.corpora as corpora
-from gensim.utils import simple_preprocess
-from gensim.models import LdaMulticore
-import nltk
 import re
 import time
-import pyLDAvis
-import pyLDAvis.gensim_models as gensimvis
-import matplotlib.pyplot as plt
+import nltk
+
+from bertopic import BERTopic
+from openai import OpenAI
 
 # ----------------------------
 # OpenAI optimized client
 # ----------------------------
-from openai import OpenAI
 client = OpenAI()  # Reads your OPENAI_API_KEY from environment
 
 
@@ -75,23 +70,36 @@ RSS_FEEDS = [
 ]
 
 MAX_ARTICLES_TO_FETCH = 500
-NUM_TOPICS_FOR_LDA = 5
+NUM_TOPICS_FOR_LDA = 5  # kept same name for compatibility with previous code
 
 
 # ----------------------------
-# Stopwords
+# Stopwords (optional, mainly for snippet cleaning)
 # ----------------------------
 try:
     nltk.data.find("corpora/stopwords")
-except:
+except LookupError:
     nltk.download("stopwords")
 
 from nltk.corpus import stopwords
+
 stop_words = stopwords.words("english")
-stop_words.extend([
-    "from", "subject", "re", "edu", "use", "said", "new", "also", "one",
-    "since", "per", "across"
-])
+stop_words.extend(
+    [
+        "from",
+        "subject",
+        "re",
+        "edu",
+        "use",
+        "said",
+        "new",
+        "also",
+        "one",
+        "since",
+        "per",
+        "across",
+    ]
+)
 
 
 # =====================================================================
@@ -111,12 +119,14 @@ def fetch_articles(max_articles):
                 article.download()
                 article.parse()
                 if len(article.text) > 300:
-                    articles.append({
-                        "title": article.title,
-                        "url": entry.link,
-                        "text": article.text
-                    })
-            except:
+                    articles.append(
+                        {
+                            "title": article.title,
+                            "url": entry.link,
+                            "text": article.text,
+                        }
+                    )
+            except Exception:
                 pass
 
             if len(articles) >= max_articles:
@@ -126,41 +136,35 @@ def fetch_articles(max_articles):
 
 
 # =====================================================================
-#                           LDA FUNCTIONS (unchanged)
+#                  BERTOPIC TOPIC MODELING (FIX 6)
 # =====================================================================
-def preprocess_texts(texts):
-    processed = []
-    for text in texts:
-        text = re.sub(r"\S*@\S*\s?", "", text)
-        text = re.sub(r"\n", " ", text)
-        tokens = simple_preprocess(text, min_len=3, max_len=20)
-        tokens = [w for w in tokens if w not in stop_words]
-        processed.append(tokens)
-    return processed
 
+def build_bertopic_model(texts, num_topics=10):
+    """
+    Build a BERTopic model over the raw article texts.
 
-def build_lda_topic_model(texts, num_topics=10, passes=10):
-    print("--- Stage 2: LDA modeling ---")
-    tokenized = preprocess_texts(texts)
-    dictionary = corpora.Dictionary(tokenized)
-    corpus = [dictionary.doc2bow(t) for t in tokenized]
+    We keep the name NUM_TOPICS_FOR_LDA for compatibility, but
+    internally we use BERTopic with nr_topics=num_topics.
+    """
+    print("--- Stage 2: BERTopic modeling ---")
 
-    model = LdaMulticore(
-        corpus=corpus,
-        id2word=dictionary,
-        num_topics=num_topics,
-        passes=passes,
-        random_state=100,
+    # BERTopic will create embeddings internally (default uses a sentence-transformer)
+    topic_model = BERTopic(
+        nr_topics=num_topics,
+        calculate_probabilities=True,
+        verbose=True,
     )
-    return model, corpus, dictionary
+
+    topics, probs = topic_model.fit_transform(texts)
+    return topic_model, topics, probs
 
 
 # =====================================================================
-#             📌 OPTIMIZED OPENAI TOPIC INTERPRETATION (SNIPPET BASED)
+#             GPT TOPIC INTERPRETATION (SNIPPET-BASED)
 # =====================================================================
 
 MAX_SNIPPET_CHARS = 500
-MAX_COMBINED_CHARS = 9000   # safe cap for the LLM
+MAX_COMBINED_CHARS = 9000  # safety cap for the LLM
 
 
 def extract_snippet(full_text):
@@ -170,15 +174,29 @@ def extract_snippet(full_text):
     return snippet[:MAX_SNIPPET_CHARS]
 
 
-def get_top_docs(lda_model, corpus, article_texts, top_n=40):
-    topic_docs = {t: [] for t in range(lda_model.num_topics)}
+def get_top_docs_bertopic(topic_model, texts, top_n=40):
+    """
+    Use BERTopic's document info to get top documents per topic
+    based on the per-document topic probability.
 
-    for doc_i, bow in enumerate(corpus):
-        for topic_id, prob in lda_model.get_document_topics(bow, minimum_probability=0):
-            topic_docs[topic_id].append((prob, doc_i))
+    Returns:
+        dict[topic_id] = list of (probability, doc_index)
+    """
+    print("--- Selecting representative documents (BERTopic) ---")
+    info_df = topic_model.get_document_info(texts)
 
-    for t in topic_docs:
-        topic_docs[t] = sorted(topic_docs[t], reverse=True)[:top_n]
+    topic_docs = {}
+    for topic_id in info_df["Topic"].unique():
+        if topic_id == -1:
+            # -1 is BERTopic's 'outlier' topic
+            continue
+
+        df_topic = (
+            info_df[info_df["Topic"] == topic_id]
+            .sort_values("Probability", ascending=False)
+            .head(top_n)
+        )
+        topic_docs[topic_id] = list(zip(df_topic["Probability"], df_topic.index))
 
     return topic_docs
 
@@ -226,21 +244,23 @@ Return ONLY valid JSON:
     return response.choices[0].message.content
 
 
-def interpret_topics(lda_model, corpus, article_texts, top_docs=40):
-    print("\n--- Selecting representative documents ---")
-    topic_docs = get_top_docs(lda_model, corpus, article_texts, top_n=top_docs)
+def interpret_topics(topic_model, texts, top_docs=40):
+    """
+    Build topic → GPT summary mapping using BERTopic clusters.
+    """
+    topic_docs = get_top_docs_bertopic(topic_model, texts, top_n=top_docs)
 
-    print("\n--- OpenAI Topic Interpretation (Snippet-Based) ---")
+    print("\n--- OpenAI Topic Interpretation (BERTopic-based) ---")
     results = {}
     for t, docs in topic_docs.items():
         print(f"Processing Topic {t} ...")
-        results[t] = summarize_topic(t, docs, article_texts)
+        results[t] = summarize_topic(t, docs, texts)
 
     return results
 
 
 # =====================================================================
-#                               MAIN
+#                               MAIN (optional local test)
 # =====================================================================
 def main():
     start = time.time()
@@ -249,26 +269,25 @@ def main():
     articles = fetch_articles(MAX_ARTICLES_TO_FETCH)
     texts = [a["text"] for a in articles]
 
-    # 2. LDA
-    model, corpus, dictionary = build_lda_topic_model(
+    # 2. BERTopic
+    topic_model, topics, probs = build_bertopic_model(
         texts, num_topics=NUM_TOPICS_FOR_LDA
     )
 
-    print("\n=== LDA Topics ===")
-    for tid, words in model.print_topics(num_words=20):
-        print(f"Topic {tid}: {words}")
+    print("\n=== BERTopic Topics ===")
+    print(topic_model.get_topic_info())
 
     # 3. Interpret topics with OpenAI
-    topic_summaries = interpret_topics(model, corpus, texts)
+    topic_summaries = interpret_topics(topic_model, texts)
 
     print("\n=== GPT Topic Summaries ===")
     for tid, summary in topic_summaries.items():
         print(f"\nTopic {tid}:\n{summary}\n")
 
-    # 4. Visualization
-    vis = gensimvis.prepare(model, corpus, dictionary)
-    pyLDAvis.save_html(vis, "lda_topic_distance_map.html")
-    print("Saved LDA map to lda_topic_distance_map.html")
+    # 4. Visualization (for local testing)
+    vis_fig = topic_model.visualize_topics()
+    vis_fig.write_html("bertopic_topic_map.html")
+    print("Saved BERTopic map to bertopic_topic_map.html")
 
     print(f"Total time: {time.time() - start:.2f}s")
 
