@@ -15,7 +15,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def generate_dashboard():
     # ------------------------------------------------------------
-    # 1. Full pipeline (same as v04)
+    # 1. Full pipeline (from Version 4)
     # ------------------------------------------------------------
     print("Fetching articles...")
     articles = fetch_articles(MAX_ARTICLES_TO_FETCH)
@@ -29,7 +29,7 @@ def generate_dashboard():
     print("Generating LLM topic summaries...")
     topic_summaries_raw = interpret_topics(topic_model, texts)
 
-    # Parse JSON outputs into Python dicts
+    # Parse JSON outputs
     topic_summaries = {}
     for tid, summary_json in topic_summaries_raw.items():
         try:
@@ -43,26 +43,24 @@ def generate_dashboard():
             }
 
     # ------------------------------------------------------------
-    # 2. Build better visualization metadata
+    # 2. Metadata extraction for improved visualization
     # ------------------------------------------------------------
     doc_info = topic_model.get_document_info(texts)
     topic_info = topic_model.get_topic_info()
 
-    # Only real topics (no -1)
     valid_topics = topic_info[topic_info["Topic"] != -1]["Topic"].tolist()
 
     hover_texts = []
     custom_labels = []
 
     for tid in valid_topics:
-        # GPT label
         label = topic_summaries[tid]["label"]
 
         # Top words
         top_words = topic_model.get_topic(tid)
         top_words_text = ", ".join([w[0] for w in top_words[:5]]) if top_words else ""
 
-        # Top 3 headlines
+        # Top headlines
         df_t = (
             doc_info[doc_info["Topic"] == tid]
             .sort_values("Probability", ascending=False)
@@ -76,7 +74,6 @@ def generate_dashboard():
 
         headlines_text = "; ".join(headlines) if headlines else "No headline"
 
-        # Combined hover
         hover_texts.append(
             f"<b>{label}</b><br>"
             f"<b>Top words:</b> {top_words_text}<br>"
@@ -86,77 +83,121 @@ def generate_dashboard():
         custom_labels.append(label)
 
     # ------------------------------------------------------------
-    # 3. Nicer BERTopic map (same position / layout)
+    # 3. Upgraded BERTopic visualization (Version 5.1 + Version 6)
     # ------------------------------------------------------------
     fig = topic_model.visualize_topics(
         custom_labels=True,
-        width=900,
-        height=800
+        width=1000,
+        height=850
     )
 
-    # Inject hover text
+    # ===== Modern color palette (Version 6) =====
+    pastel_palette = [
+        "#7DA1C4", "#A3C4BC", "#D7E3E7",
+        "#C4A287", "#E8D7C1", "#9BA6B2",
+        "#C3BABA", "#8E9AAF", "#B8CBD0",
+    ]
+
+    # assign colors cycling through pastel palette
+    num_points = len(fig.data[0].x)
+    fig.data[0].marker.color = [
+        pastel_palette[i % len(pastel_palette)] for i in range(num_points)
+    ]
+
+    # ===== Bigger bubbles (executive look) =====
+    fig.data[0].marker.size = [55] * num_points
+    fig.data[0].marker.opacity = 0.88
+    fig.data[0].marker.line.width = 1
+    fig.data[0].marker.line.color = "#444"
+
+    # ===== Hover tooltips =====
     fig.data[0].text = hover_texts
     fig.data[0].hovertemplate = "%{text}<extra></extra>"
 
-    # Convert to embeddable HTML snippet
+    # ===== Add labels next to bubbles =====
+    for i, label in enumerate(custom_labels):
+        x = fig.data[0].x[i]
+        y = fig.data[0].y[i]
+
+        fig.add_annotation(
+            x=x,
+            y=y,
+            text=f"<b>{label}</b>",
+            showarrow=False,
+            font=dict(size=15, color="#222"),
+            xanchor="left",
+            yanchor="middle"
+        )
+
+    # Convert map to HTML snippet
     topic_map_html = fig.to_html(full_html=False, include_plotlyjs="cdn")
 
     # ------------------------------------------------------------
-    # OPTIONAL: Add barchart of top words
+    # 4. Resized barchart (no horizontal scrolling)
     # ------------------------------------------------------------
     barchart_fig = topic_model.visualize_barchart(
         top_n_topics=NUM_TOPICS_FOR_LDA,
-        width=900,
-        height=600
+        width=750,
+        height=500
     )
-    barchart_html = barchart_fig.to_html(full_html=False, include_plotlyjs=False)
+
+    barchart_fig.update_layout(
+        margin=dict(l=20, r=20),
+        font=dict(size=13),
+    )
+
+    barchart_html = barchart_fig.to_html(
+        full_html=False,
+        include_plotlyjs=False
+    )
 
     # ------------------------------------------------------------
-    # 4. Build the same HTML dashboard as before
+    # 5. Build Dashboard HTML (same layout as V4/V5)
     # ------------------------------------------------------------
     timestamp = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S UTC")
 
     html = f"""
 <html>
 <head>
-    <title>Daily News Topic Dashboard (BERTopic + GPT)</title>
+    <title>Daily News Topic Dashboard</title>
 
     <style>
         body {{
             margin: 0;
             padding: 0;
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background-color: #fafafa;
         }}
 
         .header {{
-            background: #f2f2f2;
-            padding: 12px;
-            font-size: 15px;
+            background: #E7EBEF;
+            padding: 14px;
+            font-size: 17px;
             font-weight: bold;
-            border-bottom: 2px solid #ccc;
+            border-bottom: 2px solid #d0d0d0;
         }}
 
         .main-container {{
             display: flex;
-            height: calc(100vh - 48px);
+            height: calc(100vh - 60px);
         }}
 
         .left-panel {{
-            width: 55%;
+            width: 52%;
             padding: 10px;
             border-right: 3px solid #ccc;
             overflow-y: scroll;
         }}
 
         .right-panel {{
-            width: 45%;
+            width: 48%;
             padding: 20px;
             overflow-y: scroll;
         }}
 
         .topic-block {{
-            background: #fafafa;
-            margin-bottom: 25px;
+            background: #ffffff;
+            margin-bottom: 20px;
             padding: 15px;
             border-radius: 8px;
             border: 1px solid #ddd;
@@ -166,8 +207,8 @@ def generate_dashboard():
             margin-top: 0;
         }}
     </style>
-
 </head>
+
 <body>
 
 <div class="header">
@@ -176,21 +217,19 @@ def generate_dashboard():
 
 <div class="main-container">
 
-    <!-- Left: Upgraded BERTopic map -->
     <div class="left-panel">
-        <h2>BERTopic Topic Map</h2>
+        <h2>Topic Distance Map</h2>
         {topic_map_html}
 
-        <h2>Top Words per Topic</h2>
+        <h2>Top Words (per Topic)</h2>
         {barchart_html}
     </div>
 
-    <!-- Right: GPT summaries -->
     <div class="right-panel">
         <h2>Topic Summaries (GPT)</h2>
 """
 
-    # Insert summaries
+    # Write summaries
     for tid in sorted(topic_summaries.keys()):
         s = topic_summaries[tid]
 
@@ -214,7 +253,6 @@ def generate_dashboard():
 </html>
 """
 
-    # Save file
     out_file = os.path.join(OUTPUT_DIR, "index.html")
     with open(out_file, "w", encoding="utf-8") as f:
         f.write(html)
