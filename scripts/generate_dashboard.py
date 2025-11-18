@@ -48,7 +48,7 @@ topic_info = topic_model.get_topic_info()
 print("Generating GPT summaries...")
 topic_summaries = []
 
-for topic_id in topic_info.topic.head():
+for for topic_id in topic_info["Topic"].head():
     if topic_id == -1:
         continue
 
