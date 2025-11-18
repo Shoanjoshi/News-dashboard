@@ -3,11 +3,13 @@ numpy
 pandas
 openai
 feedparser
+lxml_html_clean
 newspaper3k
 plotly
 sentence-transformers
 umap-learn
 hdbscan
+
 
 
 
