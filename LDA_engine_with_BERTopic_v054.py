@@ -99,7 +99,7 @@ def summarize_topic_gpt(topic_id, words, docs):
     snippet_text = "\n".join(f"- {d[:200]}..." for d in docs[:3])
 
     prompt = (
-        "You are a professional risk manager ata global bank.\n"
+        "You are a professional risk manager at a global bank.\n"
         "Write a clear topic summary based on key terms and example snippets.\n"
         "STRICT FORMAT:\n"
         "TITLE: <UPPERCASE MAX 5 WORDS>\n"
@@ -208,3 +208,4 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
