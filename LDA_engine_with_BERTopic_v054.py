@@ -100,10 +100,10 @@ def summarize_topic_gpt(topic_id, words, docs):
 
     prompt = (
         "You are a professional risk manager at a global bank.\n"
-        "Write a clear topic summary based on key terms and example snippets.\n"
+        "Write a clear topic summary based on key terms and explictly citing examples from the snippets provided for that topic.\n"
         "STRICT FORMAT:\n"
         "TITLE: <UPPERCASE MAX 5 WORDS>\n"
-        "SUMMARY: <1 sentence explaining the topic>\n\n"
+        "SUMMARY: <2-3 sentences explaining the topic>\n\n"
         f"Topic ID: {topic_id}\n"
         f"Key Terms: {', '.join(words[:10])}\n"
         f"Example Snippets:\n{snippet_text}\n"
@@ -208,4 +208,5 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
 
