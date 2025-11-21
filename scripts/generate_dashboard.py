@@ -1,6 +1,6 @@
 # ============================================
 # 📄 generate_dashboard.py
-# Version 5.4 – Correct summary dict handling
+# Version 5.4 – Stable dashboard with GPT summaries & visualizations
 # ============================================
 
 import os
@@ -21,7 +21,7 @@ def generate_dashboard():
     # 1️⃣ Run topic modeling and summarization
     docs, topic_summaries, topic_model = generate_topic_results()
 
-    # Handle insufficient data
+    # If no documents or no model → fallback simple dashboard
     if not docs or not topic_model:
         print("⚠️ Not enough data for full dashboard. Using fallback layout.")
         html_content = "<h3>No sufficient data to generate dashboard today.</h3>"
@@ -30,8 +30,9 @@ def generate_dashboard():
         print("🟡 Dashboard generated with fallback content.")
         return
 
-    # 2️⃣ Build visualizations
+    # 2️⃣ Prepare topic visualization
     print("📊 Building visualizations...")
+
     try:
         fig_topics = topic_model.visualize_topics(width=600, height=650)
     except Exception as e:
@@ -44,30 +45,21 @@ def generate_dashboard():
         print(f"⚠️ Unable to build barchart. Reason: {e}")
         fig_barchart = None
 
+    # 3️⃣ Convert graphs to HTML
     html_topic_map = fig_topics.to_html(full_html=False) if fig_topics else "<p>No topic map available.</p>"
     html_barchart = fig_barchart.to_html(full_html=False) if fig_barchart else "<p>No bar chart available.</p>"
 
-    # 3️⃣ Correct summary formatting
-    summary_list = []
-    for topic_id, topic_data in topic_summaries.items():
-        if isinstance(topic_data, dict):  # Expected valid GPT structure
-            summary_list.append({
-                "topic_id": topic_id,
-                "summary": {
-                    "title": topic_data.get("title", f"Topic {topic_id}"),
-                    "summary": topic_data.get("summary", "").replace("\n", "<br>")
-                }
-            })
-        else:  # In case of fallback string
-            summary_list.append({
-                "topic_id": topic_id,
-                "summary": {
-                    "title": f"Topic {topic_id}",
-                    "summary": str(topic_data).replace("\n", "<br>")
-                }
-            })
+    # 4️⃣ Export topic summaries (now properly formatted)
+    summary_list = [
+        {
+            "topic_id": k,
+            "title": v["title"].replace("\n", "<br>"),
+            "summary": v["summary"].replace("\n", "<br>")
+        }
+        for k, v in topic_summaries.items()
+    ]
 
-    # 4️⃣ Render HTML dashboard
+    # 5️⃣ Render dashboard via Jinja2 template
     env = Environment(loader=FileSystemLoader("templates"))
     template = env.get_template("dashboard_template.html")
 
@@ -77,13 +69,16 @@ def generate_dashboard():
         summaries=summary_list,
     )
 
-    # 5️⃣ Write output
+    # 6️⃣ Write to HTML
     output_path = os.path.join(OUTPUT_DIR, "index.html")
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(rendered_html)
 
     print(f"🎉 Dashboard successfully generated → {output_path}")
 
+
+# --------------------------------------------
 # Run when executed manually
+# --------------------------------------------
 if __name__ == "__main__":
     generate_dashboard()
