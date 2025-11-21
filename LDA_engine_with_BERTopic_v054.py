@@ -100,57 +100,44 @@ def summarize_topic_gpt(topic_id, words, docs):
 
     prompt = (
         "You are a senior risk strategist at a global bank preparing a concise daily briefing. "
-        "Analyze the topic using the key terms and article excerpts. Focus on identifying the "
-        "dominant theme, underlying drivers if available, and sentiment. "
-        #"Do NOT simply restate keywords; instead, infer the relevance to markets or global trends.\n\n"
-    
-        "STRICT OUTPUT FORMAT (follow exactly):\n"
-        "TITLE: <3-5 WORDS, UPPERCASE, summarizing key theme in a neutral factual tone>\n"
-        "SUMMARY: <2-3 tight sentences describing the underlying issue and remaining referncing representative examples from snippets if useful, but do not copy text.>\n"
-    
+        "Analyze the topic using the key terms and excerpts. Focus on key drivers and relevance to markets.\n\n"
+        "STRICT FORMAT ONLY:\n"
+        "TITLE: <3-5 WORDS, UPPERCASE>\n"
+        "SUMMARY: <2-3 concise sentences>\n"
         f"Topic ID: {topic_id}\n"
         f"Key Terms: {', '.join(words[:10])}\n"
-        f"Example Snippets (use as supporting reference only):\n{snippet_text}\n"
+        f"Example Snippets:\n{snippet_text}\n"
     )
 
     try:
         response = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=300,
-            temperature=0.25
+            max_completion_tokens=350,
+            temperature=0.35
         )
-        text = response.choices[0].message.content.strip()
+        content = response.choices[0].message.content.strip()
 
-        # --- Parse title and summary ---
-        lines = content.split("\n")
-        title = ""
-        summary = ""
+        # --- NEW ROBUST PARSING ---
+        title, summary = None, None
+        for line in content.split("\n"):
+            cleaned = line.strip().lower()
+            if "title" in cleaned:
+                title = line.split(":", 1)[-1].strip()
+            elif "summary" in cleaned:
+                summary = line.split(":", 1)[-1].strip()
 
-        for line in lines:
-            if line.upper().startswith("TITLE:"):
-                title = line.replace("TITLE:", "").strip()
-            elif line.upper().startswith("SUMMARY:"):
-                summary = line.replace("SUMMARY:", "").strip()
-        
-        if not text.startswith("TITLE:"):
-            return f"Topic {topic_id}: {', '.join(words[:5])} (fallback)"
+        if not title:
+            title = f"Topic {topic_id}"
+        if not summary:
+            summary = f"{', '.join(words[:5])} (fallback)"
 
-        return text
+        return {"title": title, "summary": summary}
 
     except Exception as e:
-        print(f"⚠️ GPT-5-nano error, trying fallback: {e}")
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=[{"role": "user", "content": prompt}],
-                max_completion_tokens=300,
-                temperature=0.25
-            )
-            return response.choices[0].message.content.strip()
-        except Exception as e2:
-            print(f"⚠️ GPT fallback error: {e2}")
-            return f"Topic {topic_id}: {', '.join(words[:5])} (fallback)"
+        print(f"⚠️ GPT error (fallback): {e}")
+        return {"title": f"Topic {topic_id}", "summary": f"{', '.join(words[:5])} (fallback)"}
+
 
 # --------------------------------------------
 # 5️⃣ BERTopic Engine (Natural Topic Clustering)
@@ -226,6 +213,7 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
 
 
 
