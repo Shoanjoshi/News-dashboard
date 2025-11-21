@@ -1,4 +1,4 @@
-!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8" />
@@ -21,25 +21,37 @@
             padding-left: 20px;
         }
 
-        .summary-section {
-            margin-bottom: 25px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 8px;
-            background: #f9f9f9;
-        }
-
-        h2 {
-            margin-top: 0;
-        }
-
         .chart-container {
             margin-bottom: 25px;
         }
 
-        .topic-title {
+        /* Table Styling */
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+            margin-bottom: 20px;
+        }
+        .summary-table th {
+            padding: 8px;
+            background: #f2f2f2;
+            border: 1px solid #ccc;
             font-weight: bold;
-            color: #003366;
+            text-align: left;
+        }
+        .summary-table td {
+            padding: 6px 8px;
+            border: 1px solid #ccc;
+            vertical-align: top;
+        }
+
+        .topic-index {
+            font-weight: bold;
+            text-align: center;
+        }
+
+        h2 {
+            margin-top: 0;
         }
     </style>
 </head>
@@ -58,15 +70,30 @@
         </div>
     </div>
 
-    <!-- RIGHT SIDE (LLM Summaries) -->
+    <!-- RIGHT SIDE (LLM Summaries in Table Format) -->
     <div class="right-panel">
         <h2>📝 Topic Summaries</h2>
-        {% for item in summaries %}
-            <div class="summary-section">
-                <p class="topic-title">Topic {{ item.topic_id }}</p>
-                <p>{{ item.summary | safe }}</p>
-            </div>
-        {% endfor %}
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th style="width: 60px;">Topic</th>
+                    <th>Title</th>
+                    <th>Summary</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in summaries %}
+                    {% set lines = item.summary.split('\n') %}
+                    {% set title = lines[0].replace('TITLE: ', '').strip() %}
+                    {% set body = lines[1].replace('SUMMARY: ', '').strip() if lines|length > 1 else item.summary %}
+                    <tr>
+                        <td class="topic-index">{{ item.topic_id }}</td>
+                        <td><strong>{{ title }}</strong></td>
+                        <td>{{ body }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
 
 </body>
