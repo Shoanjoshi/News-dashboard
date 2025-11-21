@@ -156,11 +156,14 @@ def run_bertopic_analysis(docs):
         min_samples=1
     )
 
+    vectorizer_model = CountVectorizer(stop_words="english")
+    
     topic_model = BERTopic(
         umap_model=umap_model,
         hdbscan_model=hdbscan_model,
         nr_topics=None,
         top_n_words=15,
+        vectorizer_model=vectorizer_model, 
         verbose=True,
     )
 
@@ -208,5 +211,6 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
 
 
