@@ -89,10 +89,11 @@ def summarize_topic_gpt(topic_id, words, docs):
 
     prompt = (
         "You are a senior risk strategist at a global bank preparing a concise daily briefing. "
-        "Analyze the topic using the key terms and excerpts. Focus on key drivers and relevance to markets.\n\n"
+        "Analyze the topic using the key terms and excerpts. Focus on key drivers, likely impact "
+        "on markets or geopolitical risk, and sentiment.\n\n"
         "STRICT FORMAT ONLY:\n"
-        "TITLE: <3-5 WORDS, UPPERCASE>\n"
-        "SUMMARY: <2-3 concise sentences>\n"
+        "TITLE: <3–5 WORDS, UPPERCASE>\n"
+        "SUMMARY: <2–3 concise sentences>\n"
         f"Topic ID: {topic_id}\n"
         f"Key Terms: {', '.join(words[:10])}\n"
         f"Example Snippets:\n{snippet_text}\n"
@@ -102,29 +103,30 @@ def summarize_topic_gpt(topic_id, words, docs):
         response = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=350   # 🔹 FIXED: correct OpenAI parameter
-            # 🔸 temperature removed – not supported by gpt-5-nano
+            max_completion_tokens=350   # 🔥 removed temperature
         )
-        content = response.choices[0].message.content.strip()
 
+        content = response.choices[0].message.content.strip()
         title, summary = None, None
         for line in content.split("\n"):
-            cleaned = line.strip().lower()
-            if "title" in cleaned:
-                title = line.split(":", 1)[-1].strip()
-            elif "summary" in cleaned:
-                summary = line.split(":", 1)[-1].strip()
+            lower = line.lower().strip()
+            if lower.startswith("title:"):
+                title = line.split(":", 1)[1].strip()
+            elif lower.startswith("summary:"):
+                summary = line.split(":", 1)[1].strip()
 
         if not title:
             title = f"Topic {topic_id}"
         if not summary:
-            summary = f"{', '.join(words[:5])} (fallback)"
+            summary = ", ".join(words[:5]) + " (fallback)"
 
         return {"title": title, "summary": summary}
 
     except Exception as e:
         print(f"⚠️ GPT error (fallback): {e}")
-        return {"title": f"Topic {topic_id}", "summary": f"{', '.join(words[:5])} (fallback)"}
+        return {"title": f"Topic {topic_id}",
+                "summary": ", ".join(words[:5]) + " (fallback)"}
+
 
 # --------------------------------------------
 # 5️⃣ BERTopic Engine
@@ -196,3 +198,4 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
