@@ -99,14 +99,19 @@ def summarize_topic_gpt(topic_id, words, docs):
     snippet_text = "\n".join(f"- {d[:200]}..." for d in docs[:3])
 
     prompt = (
-        "You are a professional risk manager at a global bank.\n"
-        "Write a clear topic summary based on key terms and explictly citing examples from the snippets provided for that topic.\n"
-        "STRICT FORMAT:\n"
-        "TITLE: <UPPERCASE MAX 5 WORDS>\n"
-        "SUMMARY: <2-3 sentences explaining the topic>\n\n"
+        "You are a senior risk strategist at a global investment bank preparing a daily briefing. "
+        "Analyze the topic using the key terms and article excerpts. Focus on identifying the "
+        "dominant theme, underlying drivers, risk implications, and sentiment. "
+        "Do NOT simply restate keywords; instead, infer the relevance to markets or global trends.\n\n"
+    
+        "STRICT OUTPUT FORMAT (follow exactly):\n"
+        "TITLE: <3-5 WORDS, UPPERCASE, summarizing key theme>\n"
+        "SUMMARY: <2-3 sentences: 1-2 describing the underlying issue, 1 describing implications or risks (if any). "
+        "Mention representative example from snippets if useful, but do not copy text.>\n\n"
+    
         f"Topic ID: {topic_id}\n"
         f"Key Terms: {', '.join(words[:10])}\n"
-        f"Example Snippets:\n{snippet_text}\n"
+        f"Example Snippets (use as supporting reference only):\n{snippet_text}\n"
     )
 
     try:
@@ -211,6 +216,7 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
 
 
 
