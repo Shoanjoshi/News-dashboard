@@ -195,7 +195,7 @@ def generate_topic_results():
 
     print(f"🧠 Detected {topic_info.shape[0]} topics.")
 
-    for topic_id in topic_info.Topic.head():
+    for topic_id in topic_info.Topic:
         if topic_id == -1:
             continue
         words = [t[0] for t in topic_model.get_topic(topic_id)]
@@ -215,6 +215,7 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
 
 
 
