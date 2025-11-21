@@ -24,7 +24,6 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # 2️⃣ Optimized & Diversified RSS Sources
 # --------------------------------------------
 RSS_FEEDS = [
-    # 📈 Global Business & Economy
     "https://feeds.reuters.com/reuters/businessNews",
     "https://feeds.reuters.com/reuters/markets",
     "https://www.ft.com/rss/home/us",
@@ -32,34 +31,24 @@ RSS_FEEDS = [
     "https://www.ft.com/rss/home/asia",
     "https://www.wsj.com/xml/rss/3_7014.xml",
     "https://www.wsj.com/xml/rss/3_7085.xml",
-
-    # 💰 Banking, Private Credit, Finance
     "https://www.bloomberg.com/feeds/podcast/etf.xml",
     "https://www.bloomberg.com/markets/economics.rss",
     "https://www.bloomberg.com/feeds/bfm/podcast-odd-lots.xml",
     "https://feeds.marketwatch.com/marketwatch/topstories/",
     "https://feeds.marketwatch.com/marketwatch/marketpulse/",
-
-    # 🌍 World Politics & Geopolitics
     "https://feeds.reuters.com/reuters/worldNews",
     "https://feeds.reuters.com/reuters/politicsNews",
     "https://www.aljazeera.com/xml/rss/all.xml",
     "http://feeds.bbci.co.uk/news/world/rss.xml",
     "http://feeds.bbci.co.uk/news/politics/rss.xml",
     "http://rss.cnn.com/rss/edition_world.rss",
-
-    # 🏦 Asia & Emerging Markets
     "https://asia.nikkei.com/rss/feed",
     "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
     "https://www.scmp.com/rss/91/feed",
-
-    # 🇪🇺 Europe Economy
     "https://www.euronews.com/rss?level=theme&name=business",
     "https://www.economist.com/europe/rss.xml",
     "https://www.theguardian.com/world/rss",
     "https://www.theguardian.com/business/rss",
-
-    # 🚀 Tech & Innovation
     "https://feeds.reuters.com/reuters/technologyNews",
     "https://www.techspot.com/backend.xml",
     "https://feeds.feedburner.com/TechCrunch/",
@@ -93,7 +82,7 @@ def fetch_articles():
     return articles
 
 # --------------------------------------------
-# 4️⃣ GPT Summarization (Improved Logic)
+# 4️⃣ GPT Summarization (Fixed Parameters)
 # --------------------------------------------
 def summarize_topic_gpt(topic_id, words, docs):
     snippet_text = "\n".join(f"- {d[:200]}..." for d in docs[:3])
@@ -113,12 +102,11 @@ def summarize_topic_gpt(topic_id, words, docs):
         response = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=350,
-            temperature=0.35
+            max_tokens=350   # 🔹 FIXED: correct OpenAI parameter
+            # 🔸 temperature removed – not supported by gpt-5-nano
         )
         content = response.choices[0].message.content.strip()
 
-        # --- NEW ROBUST PARSING ---
         title, summary = None, None
         for line in content.split("\n"):
             cleaned = line.strip().lower()
@@ -138,9 +126,8 @@ def summarize_topic_gpt(topic_id, words, docs):
         print(f"⚠️ GPT error (fallback): {e}")
         return {"title": f"Topic {topic_id}", "summary": f"{', '.join(words[:5])} (fallback)"}
 
-
 # --------------------------------------------
-# 5️⃣ BERTopic Engine (Natural Topic Clustering)
+# 5️⃣ BERTopic Engine
 # --------------------------------------------
 def run_bertopic_analysis(docs):
     print("🚀 Running BERTopic using natural clustering...")
@@ -153,19 +140,15 @@ def run_bertopic_analysis(docs):
         random_state=42
     )
 
-    hdbscan_model = HDBSCAN(
-        min_cluster_size=8,
-        min_samples=1
-    )
-
+    hdbscan_model = HDBSCAN(min_cluster_size=8, min_samples=1)
     vectorizer_model = CountVectorizer(stop_words="english")
-    
+
     topic_model = BERTopic(
         umap_model=umap_model,
         hdbscan_model=hdbscan_model,
         nr_topics=None,
         top_n_words=15,
-        vectorizer_model=vectorizer_model, 
+        vectorizer_model=vectorizer_model,
         verbose=True,
     )
 
@@ -188,8 +171,7 @@ def generate_topic_results():
 
     if topic_info.shape[0] < 2:
         print("⚠️ Not enough topics detected! Fallback...")
-        summary_dict[0] = "Not enough data for topic analysis"
-        return docs, summary_dict, topic_model
+        return docs, {0: {"title": "No Topics", "summary": "Not enough data"}}, topic_model
 
     print(f"🧠 Detected {topic_info.shape[0]} topics.")
 
@@ -198,10 +180,11 @@ def generate_topic_results():
             continue
         words = [t[0] for t in topic_model.get_topic(topic_id)]
         feat_docs = [docs[idx] for idx, t in enumerate(topics) if t == topic_id]
+
         if feat_docs:
             summary_dict[topic_id] = summarize_topic_gpt(topic_id, words, feat_docs)
         else:
-            summary_dict[topic_id] = "No documents for this topic."
+            summary_dict[topic_id] = {"title": f"Topic {topic_id}", "summary": "No documents found"}
 
     return docs, summary_dict, topic_model
 
@@ -213,12 +196,3 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
-
-
-
-
-
-
-
-
-
