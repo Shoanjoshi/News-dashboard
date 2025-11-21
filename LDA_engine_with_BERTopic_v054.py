@@ -103,7 +103,7 @@ def summarize_topic_gpt(topic_id, words, docs):
         response = client.chat.completions.create(
             model="gpt-5-nano",
             messages=[{"role": "user", "content": prompt}],
-            max_completion_tokens=350   # 🔥 removed temperature
+            max_completion_tokens=350,   # 🔥 removed temperature
             temperature=1 
         )
 
@@ -199,5 +199,6 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
 
 
