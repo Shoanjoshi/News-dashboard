@@ -99,14 +99,14 @@ def summarize_topic_gpt(topic_id, words, docs):
     snippet_text = "\n".join(f"- {d[:200]}..." for d in docs[:3])
 
     prompt = (
-        "You are a senior risk strategist at a global investment bank preparing a daily briefing. "
+        "You are a senior risk strategist at a global bank preparing a concise daily briefing. "
         "Analyze the topic using the key terms and article excerpts. Focus on identifying the "
-        "dominant theme, underlying drivers, and sentiment. "
-        "Do NOT simply restate keywords; instead, infer the relevance to markets or global trends.\n\n"
+        "dominant theme, underlying drivers if available, and sentiment. "
+        #"Do NOT simply restate keywords; instead, infer the relevance to markets or global trends.\n\n"
     
         "STRICT OUTPUT FORMAT (follow exactly):\n"
         "TITLE: <3-5 WORDS, UPPERCASE, summarizing key theme in a neutral factual tone>\n"
-        "SUMMARY: <2-3 sentences: 1-2 describing the underlying issue and remaining referncing representative examples from snippets if useful, but do not copy text.>\n"
+        "SUMMARY: <2-3 tight sentences describing the underlying issue and remaining referncing representative examples from snippets if useful, but do not copy text.>\n"
     
         f"Topic ID: {topic_id}\n"
         f"Key Terms: {', '.join(words[:10])}\n"
@@ -215,6 +215,7 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
 
 
 
