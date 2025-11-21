@@ -104,6 +104,7 @@ def summarize_topic_gpt(topic_id, words, docs):
             model="gpt-5-nano",
             messages=[{"role": "user", "content": prompt}],
             max_completion_tokens=350   # 🔥 removed temperature
+            temperature=1 
         )
 
         content = response.choices[0].message.content.strip()
@@ -198,4 +199,5 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
 
