@@ -122,6 +122,17 @@ def summarize_topic_gpt(topic_id, words, docs):
         )
         text = response.choices[0].message.content.strip()
 
+        # --- Parse title and summary ---
+        lines = content.split("\n")
+        title = ""
+        summary = ""
+
+        for line in lines:
+            if line.upper().startswith("TITLE:"):
+                title = line.replace("TITLE:", "").strip()
+            elif line.upper().startswith("SUMMARY:"):
+                summary = line.replace("SUMMARY:", "").strip()
+        
         if not text.startswith("TITLE:"):
             return f"Topic {topic_id}: {', '.join(words[:5])} (fallback)"
 
@@ -215,6 +226,7 @@ if __name__ == "__main__":
     print("📊 Topic Summaries:\n")
     for k, v in summaries.items():
         print(f"🟢 {k}: {v}\n")
+
 
 
 
