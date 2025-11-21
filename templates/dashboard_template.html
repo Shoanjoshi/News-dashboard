@@ -74,8 +74,8 @@
                 {% for item in summaries %}
                     <tr>
                         <td>{{ item.topic_id }}</td>
-                        <td>{{ item.summary.title }}</td>
-                        <td>{{ item.summary.summary }}</td>
+                        <td>{{ item.title }}</td>      <!-- FIXED -->
+                        <td>{{ item.summary }}</td>    <!-- FIXED -->
                     </tr>
                 {% endfor %}
             </tbody>
