@@ -1,43 +1,89 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
+    <meta charset="UTF-8" />
     <title>Daily News Dashboard</title>
     <style>
-        body { font-family: Arial; margin: 20px; display: flex; }
-        .left-panel, .right-panel { width: 50%; padding: 10px; }
-        table { width: 100%; border-collapse: collapse; }
-        th, td { border: 1px solid #ddd; padding: 8px; }
-        th { background: #f2f2f2; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            display: flex;
+            flex-direction: row;
+        }
+
+        .left-panel {
+            width: 50%;
+            padding-right: 20px;
+        }
+
+        .right-panel {
+            width: 50%;
+            padding-left: 20px;
+        }
+
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .summary-table th,
+        .summary-table td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            vertical-align: top;
+        }
+
+        .summary-table th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            text-align: left;
+        }
+
+        .chart-container {
+            margin-bottom: 25px;
+        }
     </style>
 </head>
 <body>
 
-<div class="left-panel">
-    <h2>🗺 Topic Map</h2>
-    {{ topic_map | safe }}
+    <!-- LEFT: Topic visualizations -->
+    <div class="left-panel">
+        <h2>🗺 Topic Distance Map</h2>
+        <div class="chart-container">
+            {{ topic_map | safe }}
+        </div>
 
-    <h2>📊 Keyword Chart</h2>
-    {{ barchart | safe }}
-</div>
+        <h2>📊 Topic Keywords</h2>
+        <div class="chart-container">
+            {{ barchart | safe }}
+        </div>
+    </div>
 
-<div class="right-panel">
-    <h2>📝 Summaries</h2>
-    <table>
-        <thead>
-            <tr><th>Topic</th><th>Title</th><th>Summary</th></tr>
-        </thead>
-        <tbody>
-            {% for item in summaries %}
-            <tr>
-                <td>{{ item.topic_id }}</td>
-                <td>{{ item.title }}</td>
-                <td>{{ item.summary }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</div>
+    <!-- RIGHT: Topic summaries (table) -->
+    <div class="right-panel">
+        <h2>📝 Topic Summaries</h2>
+
+        <table class="summary-table">
+            <thead>
+                <tr>
+                    <th>Topic</th>
+                    <th>Title</th>
+                    <th>Summary</th>
+                    <th>Persistence</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in summaries %}
+                <tr>
+                    <td>{{ item.topic_id }}</td>
+                    <td>{{ item.title }}</td>
+                    <td>{{ item.summary }}</td>
+                    <td>{{ item.persistence }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 
 </body>
 </html>
