@@ -1,84 +1,50 @@
 # ============================================
 # 📄 generate_dashboard.py
-# Version 5.4 – Stable dashboard with GPT summaries & visualizations
+# Version 5.4 – Stable + topic summaries table
 # ============================================
 
 import os
 from jinja2 import Environment, FileSystemLoader
 from LDA_engine_with_BERTopic_v054 import generate_topic_results
 
-# Ensure OpenAI key exists
-if not os.getenv("OPENAI_API_KEY"):
-    raise ValueError("⚠️ OPENAI_API_KEY not found. Add it as a GitHub Secret.")
-
-# Output directory for dashboard export
 OUTPUT_DIR = "dashboard"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 def generate_dashboard():
     print("🚀 Starting dashboard generation...")
-
-    # 1️⃣ Run topic modeling and summarization
     docs, topic_summaries, topic_model = generate_topic_results()
 
-    # If no documents or no model → fallback simple dashboard
     if not docs or not topic_model:
-        print("⚠️ Not enough data for full dashboard. Using fallback layout.")
-        html_content = "<h3>No sufficient data to generate dashboard today.</h3>"
-        with open(os.path.join(OUTPUT_DIR, "index.html"), "w", encoding="utf-8") as f:
-            f.write(html_content)
-        print("🟡 Dashboard generated with fallback content.")
+        html = "<h3>⚠️ Not enough data to generate dashboard.</h3>"
+        with open(os.path.join(OUTPUT_DIR, "index.html"), "w") as f:
+            f.write(html)
         return
 
-    # 2️⃣ Prepare topic visualization
+    # Visuals
     print("📊 Building visualizations...")
-
     try:
         fig_topics = topic_model.visualize_topics(width=600, height=650)
-    except Exception as e:
-        print(f"⚠️ Unable to build topic map. Reason: {e}")
-        fig_topics = None
+        html_topic_map = fig_topics.to_html(full_html=False)
+    except:
+        html_topic_map = "<p>No topic map</p>"
 
     try:
         fig_barchart = topic_model.visualize_barchart(top_n_topics=5)
-    except Exception as e:
-        print(f"⚠️ Unable to build barchart. Reason: {e}")
-        fig_barchart = None
+        html_barchart = fig_barchart.to_html(full_html=False)
+    except:
+        html_barchart = "<p>No barchart</p>"
 
-    # 3️⃣ Convert graphs to HTML
-    html_topic_map = fig_topics.to_html(full_html=False) if fig_topics else "<p>No topic map available.</p>"
-    html_barchart = fig_barchart.to_html(full_html=False) if fig_barchart else "<p>No bar chart available.</p>"
+    # Convert summaries (now dicts)
+    summary_list = [{"topic_id": k, "title": v["title"], "summary": v["summary"]} for k, v in topic_summaries.items()]
 
-    # 4️⃣ Export topic summaries (now properly formatted)
-    summary_list = [
-        {
-            "topic_id": k,
-            "title": v["title"].replace("\n", "<br>"),
-            "summary": v["summary"].replace("\n", "<br>")
-        }
-        for k, v in topic_summaries.items()
-    ]
+    template = Environment(loader=FileSystemLoader("templates")).get_template("dashboard_template.html")
 
-    # 5️⃣ Render dashboard via Jinja2 template
-    env = Environment(loader=FileSystemLoader("templates"))
-    template = env.get_template("dashboard_template.html")
+    html = template.render(topic_map=html_topic_map, barchart=html_barchart, summaries=summary_list)
 
-    rendered_html = template.render(
-        topic_map=html_topic_map,
-        barchart=html_barchart,
-        summaries=summary_list,
-    )
+    with open(os.path.join(OUTPUT_DIR, "index.html"), "w", encoding="utf-8") as f:
+        f.write(html)
 
-    # 6️⃣ Write to HTML
-    output_path = os.path.join(OUTPUT_DIR, "index.html")
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write(rendered_html)
+    print("🎉 Dashboard generated → dashboard/index.html")
 
-    print(f"🎉 Dashboard successfully generated → {output_path}")
-
-
-# --------------------------------------------
-# Run when executed manually
-# --------------------------------------------
 if __name__ == "__main__":
     generate_dashboard()
