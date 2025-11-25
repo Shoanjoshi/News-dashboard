@@ -4,11 +4,26 @@
     <meta charset="UTF-8" />
     <title>Daily News Dashboard</title>
     <style>
+        /* ======= Executive Visual Styling ======= */
+
         body {
-            font-family: Arial, sans-serif;
+            font-family: "Segoe UI", "Roboto", "Helvetica Neue", Arial, sans-serif;
             margin: 20px;
             display: flex;
             flex-direction: row;
+        }
+
+        h1 {
+            font-size: 24px;
+            color: #003366;
+            margin-top: 0;
+        }
+
+        h2 {
+            font-size: 18px;
+            font-weight: 600;
+            color: #003366;
+            margin-bottom: 10px;
         }
 
         .left-panel {
@@ -21,32 +36,46 @@
             padding-left: 20px;
         }
 
+        .chart-container {
+            margin-bottom: 30px;
+        }
+
         .summary-table {
             width: 100%;
             border-collapse: collapse;
-        }
-
-        .summary-table th,
-        .summary-table td {
-            border: 1px solid #ddd;
-            padding: 10px;
-            vertical-align: top;
+            font-size: 14px;
         }
 
         .summary-table th {
-            background-color: #f2f2f2;
-            font-weight: bold;
+            background-color: #003366; /* Corporate dark blue */
+            color: white;
+            font-weight: 600;
+            padding: 10px;
             text-align: left;
+            text-transform: uppercase;
         }
 
-        .chart-container {
-            margin-bottom: 25px;
+        .summary-table td {
+            border: 1px solid #e0e0e0;
+            padding: 8px 10px;
+            vertical-align: top;
+            line-height: 1.4;
+        }
+
+        /* Subtle alternating rows */
+        .summary-table tr:nth-child(even) {
+            background-color: #f5f7fa;
+        }
+
+        /* Highlight top 3 topics in executive briefing style */
+        .high-priority {
+            background-color: #FFF2CC; /* Soft yellow */
         }
     </style>
 </head>
 <body>
 
-    <!-- LEFT: Topic visualizations -->
+    <!-- LEFT SIDE (Topic Map + Bar Chart) -->
     <div class="left-panel">
         <h2>🗺 Topic Distance Map</h2>
         <div class="chart-container">
@@ -59,7 +88,7 @@
         </div>
     </div>
 
-    <!-- RIGHT: Topic summaries (table) -->
+    <!-- RIGHT SIDE (Topic Summaries Table) -->
     <div class="right-panel">
         <h2>📝 Topic Summaries</h2>
 
@@ -69,17 +98,15 @@
                     <th>Topic</th>
                     <th>Title</th>
                     <th>Summary</th>
-                    <th>Persistence</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in summaries %}
-                <tr>
-                    <td>{{ item.topic_id }}</td>
-                    <td>{{ item.title }}</td>
-                    <td>{{ item.summary }}</td>
-                    <td>{{ item.persistence }}</td>
-                </tr>
+                    <tr class="{% if loop.index <= 3 %}high-priority{% endif %}">
+                        <td>{{ item.topic_id }}</td>
+                        <td>{{ item.summary.title }}</td>
+                        <td>{{ item.summary.summary }}</td>
+                    </tr>
                 {% endfor %}
             </tbody>
         </table>
