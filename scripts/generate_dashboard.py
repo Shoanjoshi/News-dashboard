@@ -1,6 +1,6 @@
 # ============================================
 # 📄 generate_dashboard.py
-# Version 5.4 – Now handles structured summaries correctly
+# Version 5.4 – Supports topic persistence tracking
 # ============================================
 
 import os
@@ -12,17 +12,18 @@ from LDA_engine_with_BERTopic_v054 import generate_topic_results
 if not os.getenv("OPENAI_API_KEY"):
     raise ValueError("⚠️ OPENAI_API_KEY not found. Add it as a GitHub Secret.")
 
+# Output directory for dashboard export
 OUTPUT_DIR = "dashboard"
 os.makedirs(OUTPUT_DIR, exist_ok=True)
-
 
 def generate_dashboard():
     print("🚀 Starting dashboard generation...")
 
-    # Run topic analysis & summarization
-    docs, topic_summaries, topic_model = generate_topic_results()
+    # 🔹 Accept 4 outputs (added persistence tracking)
+    docs, topic_summaries, topic_model, _ = generate_topic_results()
 
     if not docs or not topic_model:
+        print("⚠️ Not enough data for full dashboard. Using fallback layout.")
         html_content = "<h3>No sufficient data to generate dashboard today.</h3>"
         with open(os.path.join(OUTPUT_DIR, "index.html"), "w", encoding="utf-8") as f:
             f.write(html_content)
@@ -30,6 +31,7 @@ def generate_dashboard():
         return
 
     print("📊 Building visualizations...")
+
     try:
         fig_topics = topic_model.visualize_topics(width=600, height=650)
     except Exception as e:
@@ -42,17 +44,18 @@ def generate_dashboard():
         print(f"⚠️ Unable to build barchart. Reason: {e}")
         fig_barchart = None
 
-    html_topic_map = fig_topics.to_html(full_html=False) if fig_topics else "<p>No topic map.</p>"
-    html_barchart = fig_barchart.to_html(full_html=False) if fig_barchart else "<p>No bar chart.</p>"
+    html_topic_map = fig_topics.to_html(full_html=False) if fig_topics else "<p>No topic map available.</p>"
+    html_barchart = fig_barchart.to_html(full_html=False) if fig_barchart else "<p>No bar chart available.</p>"
 
-    # 🔥 FIXED: Use structured dictionary correctly
+    # 🔹 Now summaries are already dictionaries {"title":..., "summary":...}
     summary_list = [
         {
             "topic_id": k,
-            "title": v.get("title", f"Topic {k}"),
+            "title": v.get("title", ""),
             "summary": v.get("summary", "").replace("\n", "<br>")
         }
-        for k, v in topic_summaries.items() if isinstance(v, dict)
+        for k, v in topic_summaries.items()
+        if isinstance(v, dict)
     ]
 
     env = Environment(loader=FileSystemLoader("templates"))
@@ -71,5 +74,8 @@ def generate_dashboard():
     print(f"🎉 Dashboard successfully generated → {output_path}")
 
 
+# --------------------------------------------
+# Run when executed manually
+# --------------------------------------------
 if __name__ == "__main__":
     generate_dashboard()
