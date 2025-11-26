@@ -1,8 +1,3 @@
-python
-
-
-
-
 # ============================================
 # 📄 generate_dashboard.py
 # Version 5.5 – Persistence tracking + executive styling + fallback-safe
@@ -128,3 +123,4 @@ def generate_dashboard():
 # --------------------------------------------
 if __name__ == "__main__":
     generate_dashboard()
+
