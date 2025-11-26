@@ -54,4 +54,7 @@ def generate_dashboard():
         fig_topics = None
 
     try:
-        fig_barchart = topic_model.visualize_barchart(top_n_topics=5)  
+        fig_barchart = topic_model.visualize_barchart(top_n_topics=5)
+    except Exception as e:
+        print(f"⚠️ Unable to build barchart. Reason: {e}")
+        fig_barchart = None
