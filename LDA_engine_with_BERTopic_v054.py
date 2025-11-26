@@ -102,17 +102,20 @@ def summarize_topic_gpt(topic_id, words, docs):
     snippet_text = "\n".join(f"- {d[:200]}..." for d in docs[:3])
 
     prompt = (
-        "You are preparing a concise and objective briefing for senior stakeholders. "
-        "Summarize the topic based only on the key terms and excerpts provided. "
-        "Avoid speculation, predictions, or subjective interpretation or drawing implications. "
-        "Only report what is directly supported by the text.\n\n"
+        "You are preparing a factual briefing. "
+        "Summarize the topic strictly based on the information provided. "
+        "Do not infer impact, sentiment, or implications. "
+        "Avoid subjective language, interpretation, or predictions. "
+        "Use a neutral, objective tone.\n\n"
         "STRICT FORMAT ONLY:\n"
         "TITLE: <3–5 WORDS, UPPERCASE, factual>\n"
-        "SUMMARY: <2–3 short sentences summarizing the topic factually, without analysis or assumptions or drawing implications.>\n"
+        "SUMMARY: <2–3 concise factual sentences summarizing the core topic without assumptions or speculation. "
+        "Avoid words such as 'may', 'could', 'likely', 'appears', 'suggests'.>\n"
         f"Topic ID: {topic_id}\n"
         f"Key Terms: {', '.join(words[:10])}\n"
-        f"Example Snippets (do not copy, only use for context):\n{snippet_text}\n"
+        f"Example Snippets (for context only — do not quote any text):\n{snippet_text}\n"
     )
+
     try:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -193,5 +196,6 @@ if __name__ == "__main__":
     print("📊 Topic summaries:")
     for k, v in summaries.items():
         print(k, "→", v["title"])
+
 
 
