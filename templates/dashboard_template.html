@@ -11,44 +11,58 @@
             flex-direction: row;
         }
 
+        /* Layout */
         .left-panel { 
             width: 50%; 
-            padding-right: 20px; 
+            padding-right: 25px; 
         }
         
         .right-panel { 
             width: 50%; 
-            padding-left: 20px; 
+            padding-left: 25px; 
         }
 
+        /* Summary Table */
         .summary-table { 
             width: 100%; 
             border-collapse: collapse; 
+            table-layout: fixed; /* Prevents uneven column stretch */
+            word-wrap: break-word;
         }
 
         .summary-table th, .summary-table td {
-            border: 1px solid #ddd;
-            padding: 10px;
+            border: 1px solid #ccc;
+            padding: 12px;
             vertical-align: top;
+            font-size: 14px;
         }
 
         .summary-table th {
-            background-color: #f2f2f2;
+            background-color: #f0f2f5;
             font-weight: bold;
+            text-align: center;
         }
 
+        /* Highlight Classes */
         .new-topic { 
-            background-color: #fff3cd; 
-            font-weight: bold; 
+            background-color: #fff3cd; /* Light Yellow */
         }
-        
         .persistent-topic { 
-            background-color: #d4edda; 
-            font-weight: bold; 
+            background-color: #d4edda; /* Light Green */
         }
 
+        /* Column Styling */
+        .topic-col { width: 8%; text-align: center; font-weight: bold; }
+        .title-col { width: 25%; font-weight: bold; }
+        .summary-col { width: 67%; text-align: left; }
+
+        /* Chart Containers */
         .chart-container { 
-            margin-bottom: 25px; 
+            margin-bottom: 30px; 
+        }
+
+        h2 {
+            margin-bottom: 10px;
         }
     </style>
 </head>
@@ -63,34 +77,39 @@
         <div class="chart-container">{{ barchart | safe }}</div>
     </div>
 
-    <!-- RIGHT SIDE (LLM Summaries with persistence labels) -->
+    <!-- RIGHT SIDE -->
     <div class="right-panel">
-        <h2>📝 Topic Summaries ({{ run_date }})</h2>
+        <h2>📝 Topic Summaries – {{ run_date }}</h2>
 
         <table class="summary-table">
             <thead>
                 <tr>
-                    <th>Topic</th>
-                    <th>Title</th>
-                    <th>Summary</th>
+                    <th class="topic-col">ID</th>
+                    <th class="title-col">Title</th>
+                    <th class="summary-col">Summary</th>
                 </tr>
             </thead>
             <tbody>
                 {% for item in summaries %}
-                <tr class="{% if item.is_new %}new-topic{% elif item.is_persistent %}persistent-topic{% endif %}">
-                    <td>{{ item.topic_id }}</td>
-                    <td>{{ item.title }}</td>
-                    <td>{{ item.summary | safe }}</td>
+                <tr class="
+                    {% if item.is_new %}new-topic
+                    {% elif item.is_persistent %}persistent-topic
+                    {% endif %}
+                ">
+                    <td class="topic-col">{{ item.topic_id }}</td>
+                    <td class="title-col">{{ item.title }}</td>
+                    <td class="summary-col">{{ item.summary | safe }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
 
         <p><small>
-            🔶 Yellow = New topic<br>
-            🟢 Green = Persistent topic
+            🔶 <b>Yellow</b> = New topic<br>
+            🟢 <b>Green</b> = Persistent topic
         </small></p>
     </div>
 
 </body>
 </html>
+
