@@ -13,7 +13,7 @@ from LDA_engine_with_BERTopic_v054 import generate_topic_results
 
 # Ensure OpenAI key exists
 if not os.getenv("OPENAI_API_KEY"):
-raise ValueError("⚠️ OPENAI_API_KEY not found. Add it as a GitHub Secret.")
+  raise ValueError("⚠️ OPENAI_API_KEY not found. Add it as a GitHub Secret.")
 
 # Output directory for dashboard export
 OUTPUT_DIR = "dashboard"
