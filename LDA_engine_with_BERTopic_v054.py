@@ -28,34 +28,54 @@ SIMILARITY_THRESHOLD = 0.75  # cosine similarity for "persistent" tag
 # 2️⃣ RSS SOURCES (existing + new, combined)
 # --------------------------------------------
 RSS_FEEDS = [
-    # --- Existing global business & markets ---
+    # --- Existing feeds (US, Europe, China focused - Economic/Tech/Banking/Business) ---
+    
+    # US Economic & Business
     "https://feeds.reuters.com/reuters/businessNews",
-    "https://feeds.reuters.com/reuters/markets",
-    "https://feeds.reuters.com/reuters/worldNews",
-    "https://feeds.reuters.com/reuters/politicsNews",
-    "https://feeds.reuters.com/reuters/environment",
-    "https://feeds.reuters.com/reuters/technologyNews",
+    "https://feeds.reuters.com/reuters/markets", 
     "https://www.ft.com/rss/home/us",
-    "https://www.ft.com/rss/home/europe",
-    "https://www.ft.com/rss/home/asia",
-    "https://www.wsj.com/xml/rss/3_7014.xml",
-    "https://www.wsj.com/xml/rss/3_7085.xml",
+    "https://www.wsj.com/xml/rss/3_7014.xml",                # WSJ Markets
+    "https://www.wsj.com/xml/rss/3_7085.xml",                # WSJ Economy
     "https://feeds.marketwatch.com/marketwatch/topstories/",
     "https://feeds.marketwatch.com/marketwatch/marketpulse/",
-    "http://feeds.bbci.co.uk/news/world/rss.xml",
     "http://feeds.bbci.co.uk/news/business/rss.xml",
-    "http://rss.cnn.com/rss/edition_world.rss",
     "http://rss.cnn.com/rss/edition_business.rss",
-    "https://asia.nikkei.com/rss/feed",
-    "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
-    "https://www.scmp.com/rss/91/feed",
+    
+    # Europe Economic & Business
+    "https://www.ft.com/rss/home/europe",
     "https://www.euronews.com/rss?level=theme&name=business",
     "https://www.economist.com/europe/rss.xml",
-    "https://www.theguardian.com/world/rss",
-    "https://www.theguardian.com/business/rss",
+    "https://www.economist.com/finance-and-economics/rss.xml", # Economics focus
+    
+    # China & Asia Economic/Business
+    "https://www.ft.com/rss/home/asia",
+    "https://asia.nikkei.com/rss/feed",
+    "https://www.scmp.com/rss/91/feed",                      # SCMP Business
+    "https://www.scmp.com/rss/318931/feed",                  # SCMP China Economy
+    
+    # Technology (US/Europe/China)
     "https://feeds.reuters.com/reuters/technologyNews",
-    "https://www.techspot.com/backend.xml",
     "https://feeds.feedburner.com/TechCrunch/",
+    "https://www.ft.com/technology?format=rss",              # FT Tech
+    
+    # Banking & Financial Services
+    "https://www.americanbanker.com/feed",                   # American Banker
+    "https://www.euromoney.com/rss/all-articles",           # Euromoney
+    
+    # Geopolitical (Major policy/trade only)
+    "https://feeds.reuters.com/reuters/worldNews",           # Keep for major geopolitical events
+    "https://www.economist.com/china/rss.xml",               # China policy focus
+
+    # --- US Economic Analysis & Commentary ---
+    "https://www.economist.com/united-states/rss.xml",        # Economist - United States
+    "https://www.brookings.edu/feed/",                        # Brookings Institution
+    "https://www.aei.org/feed/",                             # American Enterprise Institute
+    "https://www.cbo.gov/rss/feeds/reports",                 # Congressional Budget Office
+    "https://www.bea.gov/rss/news-releases",                 # Bureau of Economic Analysis
+    "https://www.bls.gov/feed/news_release/rss.xml",         # Bureau of Labor Statistics
+    "https://research.stlouisfed.org/publications/review/rss", # St. Louis Fed Research
+    "https://libertystreeteconomics.newyorkfed.org/feed/",   # NY Fed Liberty Street Economics
+    "https://www.chicagofed.org/rss/publications/chicago-fed-letter", # Chicago Fed
 
     # --- New feeds (bubble, systemic, regulatory risk etc.) ---
     "https://www.ft.com/rss/home",                           # FT home
@@ -70,6 +90,8 @@ RSS_FEEDS = [
     # Macro stats & consumer debt (signs of leverage)
     "https://www.federalreserve.gov/feeds/data.xml",         # Fed – Data
     "https://www.federalreserve.gov/feeds/press_all.xml",    # Fed – All Press
+    "https://www.ecb.europa.eu/rss/press.html",             # ECB Press
+    "https://www.pboc.gov.cn/en/3688006/index.html",        # PBOC (if RSS available)
 
     # Extreme investor behavior / bubble / HF commentary
     "https://markets.businessinsider.com/rss",               # BI – Markets
@@ -85,6 +107,7 @@ RSS_FEEDS = [
     "https://www.eba.europa.eu/eba-news-rss",                # EBA
     "https://www.bis.org/rss/press_rss.xml",                 # BIS
     "https://www.imf.org/external/np/exr/feeds/rss.aspx?type=imfnews", # IMF news
+    "https://www.fsb.org/feed/",                             # Financial Stability Board
 ]
 
 # --------------------------------------------
@@ -292,3 +315,4 @@ if __name__ == "__main__":
     print("📊 Topic summaries:")
     for k, v in summaries.items():
         print(f"{k}: {v.get('title', '')} [{v.get('status', 'NEW')}]")
+
