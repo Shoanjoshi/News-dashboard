@@ -9,7 +9,7 @@ from datetime import datetime
 import numpy as np # ✅ Moved here (good practice)
 
 from jinja2 import Environment, FileSystemLoader
-from LDA_engine_with_BERTopic_v054 import generate_topic_results
+
 
 # Ensure OpenAI key exists
 if not os.getenv("OPENAI_API_KEY"):
@@ -123,4 +123,5 @@ def generate_dashboard():
 # --------------------------------------------
 if __name__ == "__main__":
     generate_dashboard()
+
 
