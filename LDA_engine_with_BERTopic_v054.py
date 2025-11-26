@@ -104,11 +104,11 @@ def summarize_topic_gpt(topic_id, words, docs):
     prompt = (
         "You are preparing a concise and objective briefing for senior stakeholders. "
         "Summarize the topic based only on the key terms and excerpts provided. "
-        "Avoid speculation, predictions, or subjective interpretation. "
+        "Avoid speculation, predictions, or subjective interpretation or drawing implications. "
         "Only report what is directly supported by the text.\n\n"
         "STRICT FORMAT ONLY:\n"
         "TITLE: <3–5 WORDS, UPPERCASE, factual>\n"
-        "SUMMARY: <2–3 short sentences summarizing the topic factually, without analysis or assumptions.>\n"
+        "SUMMARY: <2–3 short sentences summarizing the topic factually, without analysis or assumptions or drawing implications.>\n"
         f"Topic ID: {topic_id}\n"
         f"Key Terms: {', '.join(words[:10])}\n"
         f"Example Snippets (do not copy, only use for context):\n{snippet_text}\n"
@@ -193,4 +193,5 @@ if __name__ == "__main__":
     print("📊 Topic summaries:")
     for k, v in summaries.items():
         print(k, "→", v["title"])
+
 
