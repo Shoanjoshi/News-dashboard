@@ -1,10 +1,11 @@
+
 # ============================================
 # 📄 generate_dashboard.py
-# Version 5.4 – Supports topic persistence tracking
+# Version 5.4 – Supports topic persistence tracking (corrected)
 # ============================================
 
 import os
-import json  # 🔹 Needed for saving JSON file
+import json
 from jinja2 import Environment, FileSystemLoader
 
 from LDA_engine_with_BERTopic_v054 import generate_topic_results
@@ -20,7 +21,7 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 def generate_dashboard():
     print("🚀 Starting dashboard generation...")
 
-    # 🔹 Accept 4 outputs (added persistence tracking)
+    # 🔹 Accept 4 outputs (supports persistence tracking)
     docs, topic_summaries, topic_model, embeddings = generate_topic_results()
 
     if not docs or not topic_model:
@@ -31,13 +32,18 @@ def generate_dashboard():
         print("🟡 Dashboard generated with fallback content.")
         return
 
-    # 🔹 NEW — Save embeddings & titles for persistence tracking
+    # 🔹 Save embeddings & titles for persistence tracking
     json_path = os.path.join(OUTPUT_DIR, "yesterday_topics.json")
     try:
         with open(json_path, "w", encoding="utf-8") as f:
             json.dump(
-                {str(k): {"embedding": embeddings[k], "title": topic_summaries[k].get("title", "")}
-                 for k in embeddings.keys()},
+                {
+                    str(k): {
+                        "embedding": embeddings[k],
+                        "title": topic_summaries[k].get("title", ""),
+                    }
+                    for k in embeddings.keys()
+                },
                 f,
                 indent=2
             )
@@ -58,3 +64,45 @@ def generate_dashboard():
     except Exception as e:
         print(f"⚠️ Unable to build barchart. Reason: {e}")
         fig_barchart = None
+
+    # Convert graphs to HTML
+    html_topic_map = fig_topics.to_html(full_html=False) if fig_topics else "<p>No topic map available.</p>"
+    html_barchart = fig_barchart.to_html(full_html=False) if fig_barchart else "<p>No bar chart available.</p>"
+
+    # 🔹 Corrected handling – adds boolean status flags expected by template
+    summary_list = [
+        {
+            "topic_id": k,
+            "title": v.get("title", ""),
+            "summary": v.get("summary", "").replace("\n", "<br>"),
+            "is_new": v.get("status", "").upper() == "NEW",
+            "is_persistent": v.get("status", "").upper() == "PERSISTENT",
+        }
+        for k, v in topic_summaries.items()
+        if isinstance(v, dict)
+    ]
+
+    # Render dashboard using Jinja2
+    env = Environment(loader=FileSystemLoader("templates"))
+    template = env.get_template("dashboard_template.html")
+
+    rendered_html = template.render(
+        topic_map=html_topic_map,
+        barchart=html_barchart,
+        summaries=summary_list,
+        run_date=os.getenv("RUN_DATE", "Today"),
+    )
+
+    # Write HTML output
+    output_path = os.path.join(OUTPUT_DIR, "index.html")
+    with open(output_path, "w", encoding="utf-8") as f:
+        f.write(rendered_html)
+
+    print(f"🎉 Dashboard successfully generated → {output_path}")
+
+
+# --------------------------------------------
+# Run when executed manually
+# --------------------------------------------
+if __name__ == "__main__":
+    generate_dashboard()
