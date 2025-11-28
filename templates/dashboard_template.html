@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <title>Daily News Dashboard - {{ run_date }}</title>
     <style>
-        /* Global Layout */
+        /* ===== Global Layout ===== */
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
             margin: 10px;
@@ -12,35 +12,40 @@
             grid-template-columns: 1fr 1fr;
             grid-template-rows: 1fr 1fr;
             gap: 20px;
-            height: 95vh;
+            height: 96vh;
+            background-color: #fafafa;
         }
 
-        /* Panel Styling */
+        /* ===== Dashboard Panels ===== */
         .panel {
             border: 1px solid #ddd;
-            padding: 15px;
+            border-radius: 8px;
+            padding: 18px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+            background: white;
             display: flex;
             flex-direction: column;
-            background: #fff;
             overflow: hidden;
-            border-radius: 6px;
         }
 
         h2 {
-            font-size: 18px;
-            margin-bottom: 10px;
+            font-size: 20px;
             font-weight: 600;
-            color: #2c3e50;
+            margin-bottom: 12px;
+            color: #1e2a35;
         }
 
-        /* Charts */
+        /* ===== Chart Containers (take all vertical space) ===== */
         .chart-container {
             flex: 1;
-            overflow: hidden;
+            display: flex;
         }
 
-        /* Scrollable Container (Summaries & Theme Table) */
+        .chart-container > div {
+            flex: 1;
+        }
+
+        /* ===== Scrollable Sections ===== */
         .scrollable {
             flex: 1;
             overflow-y: auto;
@@ -48,43 +53,42 @@
             padding-top: 5px;
         }
 
-        /* Table Styling */
+        /* ===== Table Styling ===== */
         table {
             width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
-            word-wrap: break-word;
         }
 
         th, td {
             border: 1px solid #ccc;
-            padding: 8px;
-            font-size: 13px;
+            padding: 10px;
+            font-size: 14px;
             vertical-align: top;
         }
 
         th {
-            background-color: #f5f7fa;
+            background-color: #f2f3f5;
+            font-size: 15px;
             font-weight: 600;
             text-align: center;
         }
 
-        /* Topic Highlighting */
+        /* ===== Topic Highlight Colors ===== */
         .new-topic { background-color: #fff3cd; }
         .persistent-topic { background-color: #d4edda; }
 
-        /* Column Sizes */
+        /* ===== Column Widths ===== */
         .topic-col { width: 8%; text-align: center; font-weight: bold; }
-        .title-col { width: 25%; font-weight: bold; }
-        .summary-col { width: 67%; }
+        .title-col { width: 24%; font-weight: 600; }
+        .summary-col { width: 68%; }
 
-        /* Footer legend */
+        /* ===== Legend Styling ===== */
         .legend {
-            font-size: 12px;
+            font-size: 13px;
             margin-top: 6px;
-            color: #555;
+            color: #666;
         }
-
     </style>
 </head>
 <body>
