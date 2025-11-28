@@ -21,9 +21,9 @@
     "topicality_rank": 7
   },
   "AI": {
-    "volume": 12,
+    "volume": 8,
     "centrality": 1.0,
-    "topicality": 12.0,
+    "topicality": 8.0,
     "centrality_rank": 1,
     "topicality_rank": 1
   },
