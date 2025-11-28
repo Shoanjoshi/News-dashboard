@@ -1,6 +1,6 @@
 # ============================================
 # 📄 LDA_engine_with_BERTopic_v054.py
-# Version 5.5 – Natural topics + persistence (stable)
+# Version 5.5 – Natural topics + persistence + themes
 # ============================================
 
 import os
@@ -24,8 +24,7 @@ PREVIOUS_TOPICS_JSON = os.path.join("dashboard", "yesterday_topics.json")
 SIMILARITY_THRESHOLD = 0.75  # Cosine similarity threshold for persistence
 
 # --------------------------------------------
-# 2️⃣ RSS Sources
-# (Existing + new — unchanged from your last working version)
+# 2️⃣ RSS Sources (unchanged – your stable list)
 # --------------------------------------------
 RSS_FEEDS = [
     # US Economic & Business
@@ -67,12 +66,95 @@ RSS_FEEDS = [
 ]
 
 # --------------------------------------------
+# 2b️⃣ Theme configuration (for analytics)
+# --------------------------------------------
+
+THEMES = [
+    "Recessionary pressures",
+    "Inflation",
+    "Private credit",
+    "AI",
+    "Cyber attacks",
+    "Commercial real estate",
+    "Consumer debt",
+    "Bank lending and credit risk",
+]
+
+# Simple keyword hooks for each theme.
+# These are intentionally conservative to avoid spurious matches.
+THEME_KEYWORDS = {
+    "Recessionary pressures": [
+        "recession",
+        "recessionary",
+        "economic contraction",
+        "downturn",
+        "slowdown",
+        "economic slowdown",
+    ],
+    "Inflation": [
+        "inflation",
+        "cpi",
+        "consumer price index",
+        "price pressures",
+        "price growth",
+        "price rises",
+    ],
+    "Private credit": [
+        "private credit",
+        "direct lending",
+        "private debt",
+        "private lenders",
+    ],
+    "AI": [
+        "artificial intelligence",
+        "ai",
+        "machine learning",
+        "generative ai",
+        "genai",
+    ],
+    "Cyber attacks": [
+        "cyber attack",
+        "cyber attacks",
+        "cybersecurity",
+        "ransomware",
+        "data breach",
+        "hacking",
+        "hackers",
+    ],
+    "Commercial real estate": [
+        "commercial real estate",
+        "cre",
+        "office market",
+        "office vacancies",
+        "commercial property",
+    ],
+    "Consumer debt": [
+        "consumer debt",
+        "household debt",
+        "credit card debt",
+        "auto loans",
+        "delinquencies",
+        "delinquency",
+    ],
+    "Bank lending and credit risk": [
+        "bank lending",
+        "lending standards",
+        "credit risk",
+        "loan losses",
+        "loan loss provisions",
+        "nonperforming loans",
+        "npl",
+    ],
+}
+
+# --------------------------------------------
 # 3️⃣ Fetch & Clean
 # --------------------------------------------
 def clean_text(text: str) -> str:
     text = re.sub(r"\s+", " ", str(text)).strip()
     text = re.sub(r"<[^>]+>", "", text)
     return text
+
 
 def fetch_articles():
     articles = []
@@ -89,6 +171,7 @@ def fetch_articles():
 
     print(f"📰 Total collected articles: {len(articles)}")
     return articles if len(articles) >= 15 else []
+
 
 # --------------------------------------------
 # 4️⃣ GPT Summarization (factual style)
@@ -126,18 +209,28 @@ def summarize_topic_gpt(topic_id, words, docs):
 
         return {
             "title": title or f"Topic {topic_id}",
-            "summary": summary or ", ".join(words[:5]) + " (fallback)"
+            "summary": summary or ", ".join(words[:5]) + " (fallback)",
         }
 
     except Exception as e:
         print(f"⚠️ GPT error: {e}")
-        return {"title": f"Topic {topic_id}", "summary": ", ".join(words[:5]) + " (fallback)"}
+        return {
+            "title": f"Topic {topic_id}",
+            "summary": ", ".join(words[:5]) + " (fallback)",
+        }
+
 
 # --------------------------------------------
-# 5️⃣ RESTORED – BERTopic model runner
+# 5️⃣ BERTopic model runner
 # --------------------------------------------
 def run_bertopic_analysis(docs):
-    umap_model = UMAP(n_neighbors=15, n_components=2, min_dist=0.1, metric="cosine", random_state=42)
+    umap_model = UMAP(
+        n_neighbors=15,
+        n_components=2,
+        min_dist=0.1,
+        metric="cosine",
+        random_state=42,
+    )
     hdbscan_model = HDBSCAN(min_cluster_size=8, min_samples=1)
     vectorizer_model = CountVectorizer(stop_words="english")
 
@@ -152,6 +245,7 @@ def run_bertopic_analysis(docs):
     topics, probs = topic_model.fit_transform(docs)
     return topic_model, topics, probs
 
+
 # --------------------------------------------
 # 6️⃣ Persistence: Label New / Persistent
 # --------------------------------------------
@@ -160,6 +254,7 @@ def _cosine_similarity(a, b):
     if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
         return 0
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
 
 def _load_previous_embeddings():
     if not os.path.exists(PREVIOUS_TOPICS_JSON):
@@ -173,16 +268,20 @@ def _load_previous_embeddings():
         print(f"⚠️ Error loading previous topics: {e}")
         return {}
 
+
 def label_persistence(current_embeddings):
     prev_embs = _load_previous_embeddings()
     labels = {}
     for tid, emb in current_embeddings.items():
-        best_sim = max((_cosine_similarity(emb, p) for p in prev_embs.values()), default=0.0)
+        best_sim = max(
+            (_cosine_similarity(emb, p) for p in prev_embs.values()), default=0.0
+        )
         labels[tid] = "PERSISTENT" if best_sim >= SIMILARITY_THRESHOLD else "NEW"
     return labels
 
+
 # --------------------------------------------
-# 7️⃣ Main – Returns 5 values (required)
+# 7️⃣ Main – Returns 5 values (now with theme_scores)
 # --------------------------------------------
 def generate_topic_results():
     docs = fetch_articles()
@@ -193,29 +292,78 @@ def generate_topic_results():
     topic_info = topic_model.get_topic_info()
 
     summaries, embeddings = {}, {}
+    theme_topic_map = {theme: set() for theme in THEMES}
 
     for topic_id in topic_info.Topic:
         if topic_id == -1:
             continue
+
         feat_docs = [docs[i] for i, t in enumerate(topics) if t == topic_id]
         if not feat_docs:
             continue
 
+        # Top words for this topic
         words = [w[0] for w in topic_model.get_topic(topic_id)]
+
+        # GPT summary (factual)
         summaries[topic_id] = summarize_topic_gpt(topic_id, words, feat_docs)
+
+        # Topic embedding
         embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
 
-    persistence = label_persistence(embeddings)
+        # Build a text blob for simple keyword-based theme tagging
+        topic_text_parts = [" ".join(words)]
+        if summaries[topic_id].get("title"):
+            topic_text_parts.append(summaries[topic_id]["title"])
+        if summaries[topic_id].get("summary"):
+            topic_text_parts.append(summaries[topic_id]["summary"])
+        topic_text = " ".join(topic_text_parts).lower()
 
+        # Map this topic to one or more themes
+        for theme, keywords in THEME_KEYWORDS.items():
+            for kw in keywords:
+                if kw in topic_text:
+                    theme_topic_map[theme].add(topic_id)
+                    break  # avoid double-counting same theme
+
+    # Label NEW vs PERSISTENT topics
+    persistence = label_persistence(embeddings)
     for tid in summaries:
         summaries[tid]["status"] = persistence.get(tid, "NEW")
 
-    return docs, summaries, topic_model, embeddings, {}  # {} placeholder for theme_scores
+    # Build theme-level scores (volume + centrality)
+    theme_scores = {}
+    for theme in THEMES:
+        topic_ids = sorted(theme_topic_map[theme])
+        volume = len(topic_ids)
+
+        # Centrality: number of other themes that share at least one topic
+        overlap_themes = set()
+        if topic_ids:
+            for tid in topic_ids:
+                for other_theme in THEMES:
+                    if other_theme == theme:
+                        continue
+                    if tid in theme_topic_map[other_theme]:
+                        overlap_themes.add(other_theme)
+        centrality = len(overlap_themes)
+
+        theme_scores[theme] = {
+            "topics": topic_ids,
+            "volume": volume,
+            "centrality": float(centrality),
+        }
+
+    return docs, summaries, topic_model, embeddings, theme_scores
+
 
 # --------------------------------------------
 # 8️⃣ Local Test
 # --------------------------------------------
 if __name__ == "__main__":
-    docs, summaries, model, emb, _ = generate_topic_results()
+    docs, summaries, model, emb, theme_scores = generate_topic_results()
     for k, v in summaries.items():
         print(f"{k} – {v.get('title')} [{v.get('status')}]")
+    print("\nTheme scores:")
+    for theme, data in theme_scores.items():
+        print(theme, "→", data)
