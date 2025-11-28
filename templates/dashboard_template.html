@@ -4,79 +4,99 @@
     <meta charset="UTF-8" />
     <title>Daily News Dashboard - {{ run_date }}</title>
     <style>
+        /* Global Layout */
         body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            display: flex;
-            flex-direction: row;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 20px;
+            height: 95vh;
         }
 
-        /* Layout */
-        .left-panel { 
-            width: 50%; 
-            padding-right: 25px; 
-        }
-        
-        .right-panel { 
-            width: 50%; 
-            padding-left: 25px; 
+        /* Panel Styling */
+        .panel {
+            border: 1px solid #ddd;
+            padding: 15px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
             display: flex;
             flex-direction: column;
-            max-height: 100vh;
+            background: #fff;
+            overflow: hidden;
+            border-radius: 6px;
         }
 
-        .summary-container {
-            flex-grow: 1;
+        h2 {
+            font-size: 18px;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+
+        /* Charts */
+        .chart-container {
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Scrollable Container (Summaries & Theme Table) */
+        .scrollable {
+            flex: 1;
             overflow-y: auto;
+            border-top: 1px solid #eee;
+            padding-top: 5px;
         }
 
-        /* Summary Table */
-        .summary-table { 
-            width: 100%; 
-            border-collapse: collapse; 
+        /* Table Styling */
+        table {
+            width: 100%;
+            border-collapse: collapse;
             table-layout: fixed;
             word-wrap: break-word;
         }
 
-        .summary-table th, .summary-table td {
+        th, td {
             border: 1px solid #ccc;
-            padding: 12px;
+            padding: 8px;
+            font-size: 13px;
             vertical-align: top;
-            font-size: 14px;
         }
 
-        .summary-table th {
-            background-color: #f0f2f5;
-            font-weight: bold;
+        th {
+            background-color: #f5f7fa;
+            font-weight: 600;
             text-align: center;
         }
 
-        /* Highlight Classes */
+        /* Topic Highlighting */
         .new-topic { background-color: #fff3cd; }
         .persistent-topic { background-color: #d4edda; }
 
-        /* Column Styling */
+        /* Column Sizes */
         .topic-col { width: 8%; text-align: center; font-weight: bold; }
         .title-col { width: 25%; font-weight: bold; }
-        .summary-col { width: 67%; text-align: left; }
+        .summary-col { width: 67%; }
 
-        /* Chart Containers */
-        .chart-container { margin-bottom: 30px; }
+        /* Footer legend */
+        .legend {
+            font-size: 12px;
+            margin-top: 6px;
+            color: #555;
+        }
 
-        /* Theme Table */
-        .theme-table th { background-color: #e8f4fd; }
-
-        h2 { margin-bottom: 10px; }
     </style>
 </head>
 <body>
 
-    <!-- LEFT SIDE -->
-    <div class="left-panel">
+    <!-- 🗺 1️⃣ TOP-LEFT: Topic Map -->
+    <div class="panel">
         <h2>🗺 Topic Map</h2>
         <div class="chart-container">{{ topic_map | safe }}</div>
+    </div>
 
-        <!-- 🔥 REPLACE BARCHART WITH NEW VISUALS -->
+    <!-- 🎯 2️⃣ TOP-RIGHT: Theme Distance Map -->
+    <div class="panel">
         <h2>🎯 Theme Distance Map</h2>
         <div class="chart-container">
             {% if theme_map %}
@@ -85,38 +105,13 @@
                 <p>No theme visualization available.</p>
             {% endif %}
         </div>
-
-        <h2>📈 Theme Risk Signals</h2>
-        <table class="summary-table theme-table">
-            <thead>
-                <tr>
-                    <th>Theme</th>
-                    <th>Centrality (Rank)</th>
-                    <th>Topicality (Rank)</th>
-                    <th>Prior Centrality</th>
-                    <th>Prior Topicality</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for theme, data in theme_signals.items() %}
-                <tr>
-                    <td>{{ theme }}</td>
-                    <td>{{ data.centrality_rank }} ({{ data.centrality }})</td>
-                    <td>{{ data.topicality_rank }} ({{ data.topicality }})</td>
-                    <td>{{ data.prev_centrality_rank }} ({{ data.prev_centrality }})</td>
-                    <td>{{ data.prev_topicality_rank }} ({{ data.prev_topicality }})</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
     </div>
 
-    <!-- RIGHT SIDE -->
-    <div class="right-panel">
+    <!-- 📝 3️⃣ BOTTOM-LEFT: Topic Summaries -->
+    <div class="panel">
         <h2>📝 Topic Summaries – {{ run_date }}</h2>
-
-        <div class="summary-container">
-            <table class="summary-table">
+        <div class="scrollable">
+            <table>
                 <thead>
                     <tr>
                         <th class="topic-col">ID</th>
@@ -126,11 +121,7 @@
                 </thead>
                 <tbody>
                     {% for item in summaries %}
-                    <tr class="
-                        {% if item.is_new %}new-topic
-                        {% elif item.is_persistent %}persistent-topic
-                        {% endif %}
-                    ">
+                    <tr class="{% if item.is_new %}new-topic{% elif item.is_persistent %}persistent-topic{% endif %}">
                         <td class="topic-col">{{ item.topic_id }}</td>
                         <td class="title-col">{{ item.title }}</td>
                         <td class="summary-col">{{ item.summary | safe }}</td>
@@ -139,11 +130,36 @@
                 </tbody>
             </table>
         </div>
+        <p class="legend">🔶 <b>Yellow = New</b> &nbsp;|&nbsp; 🟢 <b>Green = Persistent</b></p>
+    </div>
 
-        <p><small>
-            🔶 <b>Yellow</b> = New topic<br>
-            🟢 <b>Green</b> = Persistent topic
-        </small></p>
+    <!-- 📈 4️⃣ BOTTOM-RIGHT: Theme Risk Signals -->
+    <div class="panel">
+        <h2>📈 Theme Risk Signals</h2>
+        <div class="scrollable">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Theme</th>
+                        <th>Centrality<br>(Rank)</th>
+                        <th>Topicality<br>(Rank)</th>
+                        <th>Prior Centrality</th>
+                        <th>Prior Topicality</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for theme, data in theme_signals.items() %}
+                    <tr>
+                        <td>{{ theme }}</td>
+                        <td>{{ data.centrality_rank }} ({{ data.centrality }})</td>
+                        <td>{{ data.topicality_rank }} ({{ data.topicality }})</td>
+                        <td>{{ data.prev_centrality_rank }} ({{ data.prev_centrality }})</td>
+                        <td>{{ data.prev_topicality_rank }} ({{ data.prev_topicality }})</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
 
 </body>
