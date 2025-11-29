@@ -1,26 +1,64 @@
-# ================================================
-# 🔍 LDA_engine_with_BERTopic_v054 (Updated)
-# Version 5.8 – Includes semantic theme assignment
-# ================================================
+# ======================================================
+# LDA_engine_with_BERTopic_v054.py (Restored & Stabilized)
+# Version 5.9 – Includes RSS restoration + safety checks
+# ======================================================
+
 import os
 import json
+import feedparser
+import openai
+import numpy as np
 from bertopic import BERTopic
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
-import numpy as np
-import feedparser
-import openai
 
-# 🔒 Set API key
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# ======================================================
-# 1️⃣ SETTINGS
-# ======================================================
+# --------------------------------------------
+# 🔄 RESTORED FULL RSS FEED LIST (as provided)
+# --------------------------------------------
 RSS_FEEDS = [
-    # Your existing RSS feeds…
+    # US Economic & Business
+    "https://feeds.reuters.com/reuters/businessNews",
+    "https://feeds.reuters.com/reuters/markets",
+    "https://www.ft.com/rss/home/us",
+    "https://www.wsj.com/xml/rss/3_7014.xml",
+    "https://www.wsj.com/xml/rss/3_7085.xml",
+    "https://feeds.marketwatch.com/marketwatch/topstories/",
+    "https://feeds.marketwatch.com/marketwatch/marketpulse/",
+    "http://feeds.bbci.co.uk/news/business/rss.xml",
+    "http://rss.cnn.com/rss/edition_business.rss",
+
+    # Europe & Asia
+    "https://www.ft.com/rss/home/europe",
+    "https://www.ft.com/rss/home/asia",
+    "https://asia.nikkei.com/rss/feed",
+    "https://www.scmp.com/rss/91/feed",
+
+    # Technology
+    "https://feeds.reuters.com/reuters/technologyNews",
+    "https://feeds.feedburner.com/TechCrunch/",
+
+    # New systemic risk / leverage / regulation feeds
+    "https://www.ft.com/rss/home",
+    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+    "https://www.investing.com/rss/news_25.rss",
+    "https://www.investing.com/rss/news_1.rss",
+    "https://www.investing.com/rss/news_285.rss",
+    "https://www.federalreserve.gov/feeds/data.xml",
+    "https://www.federalreserve.gov/feeds/press_all.xml",
+    "https://markets.businessinsider.com/rss",
+    "https://www.risk.net/feeds/rss",
+    "https://www.forbes.com/finance/feed",
+    "https://feeds.feedburner.com/alternativeinvestmentnews",
+    "https://www.eba.europa.eu/eba-news-rss",
+    "https://www.bis.org/rss/press_rss.xml",
+    "https://www.imf.org/external/np/exr/feeds/rss.aspx?type=imfnews",
 ]
 
+# --------------------------------------------
+# Defined Themes
+# --------------------------------------------
 THEMES = [
     "Recessionary pressures",
     "Inflation",
@@ -31,128 +69,76 @@ THEMES = [
     "Consumer debt",
     "Bank lending and credit risk",
 ]
-SIMILARITY_THRESHOLD = 0.5  # minimum theme confidence to assign
-PROMPT = """
-You are preparing a factual briefing. Summarize the topic strictly based on the information provided.
+
+SIMILARITY_THRESHOLD = 0.5
+
+PROMPT = """You are preparing a factual briefing. Summarize the topic strictly based on the information provided.
 Do not infer impact, sentiment, or implications. Avoid subjective language, predictions, or assumptions.
 Use neutral, objective tone.
 
 STRICT FORMAT ONLY:
 TITLE: <3–5 WORDS, UPPERCASE, factual>
-SUMMARY: <2–3 concise factual sentences. No speculation.>
-"""
+SUMMARY: <2–3 concise factual sentences. No speculation.>"""
 
 
-# ======================================================
-# 2️⃣ Fetch Articles
-# ======================================================
+# ------------------------------------------------------
+# 1️⃣ RSS Fetch Logic with Safety & Logging
+# ------------------------------------------------------
 def fetch_rss_articles():
     docs = []
     for feed in RSS_FEEDS:
-        parsed = feedparser.parse(feed)
-        for entry in parsed.entries[:20]:
-            content = entry.get("summary", "")[:800]
-            if content:
-                docs.append(content)
+        try:
+            parsed = feedparser.parse(feed)
+            for entry in parsed.entries[:20]:
+                content = entry.get("summary") or entry.get("description") or entry.get("title") or ""
+                if isinstance(content, str) and len(content.strip()) > 50:
+                    docs.append(content.strip()[:1000])
+        except Exception as e:
+            print(f"⚠ Error reading feed {feed}: {e}")
+
+    print(f"🧪 Total RSS articles extracted: {len(docs)}")
+    if docs:
+        print(f"📌 Sample article: {docs[0][:200]}")
+    else:
+        print("❌ No usable RSS content extracted!")
     return docs
 
 
-# ======================================================
-# 3️⃣ Summarization via GPT
-# ======================================================
+# ------------------------------------------------------
+# GPT topic summarization
+# ------------------------------------------------------
 def summarize_topic(text):
-    response = openai.ChatCompletion.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": PROMPT + "\n" + text}]
-    )
-    return response.choices[0].message.content
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": PROMPT + "\n" + text}],
+        )
+        return response.choices[0].message.content
+    except Exception:
+        return "TITLE: UNKNOWN\nSUMMARY: Summary failed."
 
 
-# ======================================================
-# 4️⃣ Theme Embedding for Semantic Classification
-# ======================================================
+# ------------------------------------------------------
+# Embedding logic
+# ------------------------------------------------------
 def load_embedding_model(topic_model):
-    """Use the same embedding model as BERTopic if set; else load default."""
     if hasattr(topic_model, "embedding_model") and topic_model.embedding_model:
-        print("📌 Using BERTopic’s embedding model for theme matching.")
         return topic_model.embedding_model
-    else:
-        print("⚠️ No embedding model attached to BERTopic. Using MiniLM.")
-        return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
 
-def get_theme_embeddings(embedding_model):
-    return embedding_model.encode(THEMES, show_progress_bar=False)
+def get_theme_embeddings(model):
+    return model.encode(THEMES, show_progress_bar=False)
 
 
-def assign_theme_to_topic(topic_embedding, theme_embeddings):
-    similarities = cosine_similarity([topic_embedding], theme_embeddings)[0]
-    best_index = np.argmax(similarities)
-    best_score = similarities[best_index]
-    if best_score >= SIMILARITY_THRESHOLD:
-        return THEMES[best_index], best_score
-    return "Others", best_score
+def assign_theme(topic_embedding, theme_embeddings):
+    sims = cosine_similarity([topic_embedding], theme_embeddings)[0]
+    best_idx = np.argmax(sims)
+    if sims[best_idx] >= SIMILARITY_THRESHOLD:
+        return THEMES[best_idx], sims[best_idx]
+    return "Others", sims[best_idx]
 
 
-# ======================================================
-# 5️⃣ Main Topic Generation & Theme Attribution Logic
-# ======================================================
-def generate_topic_results():
-    print("🚀 Fetching news articles…")
-    docs = fetch_rss_articles()
-    if not docs:
-        return [], {}, None, {}, {}
-
-    print(f"📊 {len(docs)} articles fetched.")
-
-    # === Generate BERTopic Clusters ===
-    topic_model = BERTopic(nr_topics="auto")
-    topics, probabilities = topic_model.fit_transform(docs)
-    embeddings = topic_model._embedding_model.encode(docs, show_progress_bar=False)
-
-    # === Apply GPT Summaries ===
-    topic_summaries = {}
-    for topic_id in sorted(set(topics)):
-        representative_docs = [docs[i] for i, t in enumerate(topics) if t == topic_id][:3]
-        combined_text = " ".join(representative_docs)
-        summary_text = summarize_topic(combined_text)
-        topic_summaries[topic_id] = {
-            "title": summary_text.split("SUMMARY:")[0].replace("TITLE:", "").strip(),
-            "summary": summary_text.split("SUMMARY:")[-1].strip(),
-            "status": "NEW"  # updated later
-        }
-
-    # === Topic Persistence ===
-    previous_topics_path = "dashboard/yesterday_topics.json"
-    if os.path.exists(previous_topics_path):
-        with open(previous_topics_path, "r") as f:
-            previous = json.load(f)
-        for topic_id, summary in topic_summaries.items():
-            match = "PERSISTENT" if str(topic_id) in previous else "NEW"
-            summary["status"] = match
-
-    # === Semantic Theme Classification ===
-    print("🧠 Assigning themes using embedding similarity...")
-    embedding_model = load_embedding_model(topic_model)
-    theme_embeddings = get_theme_embeddings(embedding_model)
-
-    theme_scores = {theme: {"volume": 0, "centrality": 0} for theme in THEMES}
-    theme_scores["Others"] = {"volume": 0, "centrality": 0}
-
-    for i, topic_id in enumerate(topics):
-        topic_embedding = embeddings[i]
-        assigned_theme, _ = assign_theme_to_topic(topic_embedding, theme_embeddings)
-        theme_scores[assigned_theme]["volume"] += 1
-
-    print("📌 Theme allocation complete.")
-
-    return docs, topic_summaries, topic_model, embeddings, theme_scores
-
-
-# ======================================================
-# 🧪 Debug Run
-# ======================================================
-if __name__ == "__main__":
-    print("🧪 Running in debug mode...")
-    results = generate_topic_results()
-    print(json.dumps(results[4], indent=2))
+# ------------------------------------------------------
+# Main Logic
+# ------------------------------------------
