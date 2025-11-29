@@ -1,24 +1,29 @@
-# ======================================================
-# LDA_engine_with_BERTopic_v054.py  – restored + theme embedding
-# ======================================================
+# ============================================
+# 📄 LDA_engine_with_BERTopic_v054.py
+# Reconstructed stable engine with:
+# - BERTopic clustering + topic summaries
+# - Topic embeddings for persistence
+# - Embedding-based article→theme assignment (with "Others")
+# ============================================
 
 import os
-import json
 import feedparser
-import openai
 import numpy as np
+from openai import OpenAI
 from bertopic import BERTopic
-from sentence_transformers import SentenceTransformer
+from hdbscan import HDBSCAN
+from umap import UMAP
+from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-# ------------------------------------------------------
-# 🔑 OpenAI API Key
-# ------------------------------------------------------
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# --------------------------------------------
+# OpenAI client
+# --------------------------------------------
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ------------------------------------------------------
-# 📡 RSS Feed List – as provided
-# ------------------------------------------------------
+# --------------------------------------------
+# RSS feeds – RESTORED from your config
+# --------------------------------------------
 RSS_FEEDS = [
     # US Economic & Business
     "https://feeds.reuters.com/reuters/businessNews",
@@ -58,9 +63,9 @@ RSS_FEEDS = [
     "https://www.imf.org/external/np/exr/feeds/rss.aspx?type=imfnews",
 ]
 
-# ------------------------------------------------------
-# 🎯 Themes
-# ------------------------------------------------------
+# --------------------------------------------
+# Themes for embedding-based theme analysis
+# --------------------------------------------
 THEMES = [
     "Recessionary pressures",
     "Inflation",
@@ -72,8 +77,8 @@ THEMES = [
     "Bank lending and credit risk",
 ]
 
-# minimum cosine similarity to assign to a named theme
-SIMILARITY_THRESHOLD = 0.5
+# looser threshold so not everything falls into Others
+SIMILARITY_THRESHOLD = 0.30
 
 PROMPT = """You are preparing a factual briefing. Summarize the topic strictly based on the information provided.
 Do not infer impact, sentiment, or implications. Avoid subjective language, predictions, or assumptions.
@@ -84,10 +89,10 @@ TITLE: <3–5 WORDS, UPPERCASE, factual>
 SUMMARY: <2–3 concise factual sentences. No speculation.>"""
 
 
-# ------------------------------------------------------
-# 📰 Fetch RSS Articles
-# ------------------------------------------------------
-def fetch_rss_articles():
+# --------------------------------------------
+# 1️⃣ RSS article fetcher
+# --------------------------------------------
+def fetch_articles():
     docs = []
     for feed in RSS_FEEDS:
         try:
@@ -101,124 +106,154 @@ def fetch_rss_articles():
                 )
                 if isinstance(content, str):
                     clean = content.strip()
-                    if len(clean) > 50:  # basic filter against junk/very short items
-                        docs.append(clean[:1000])
+                    if len(clean) > 50:
+                        docs.append(clean[:1200])
         except Exception as e:
-            print(f"⚠ Feed parsing failed: {feed}\nError: {e}")
+            print(f"⚠ Feed error {feed}: {e}")
 
     print(f"🔎 RSS articles extracted: {len(docs)}")
     if docs:
-        print(f"📌 Sample → {docs[0][:120]}")
+        print(f"📌 Sample article: {docs[0][:120]}")
     return docs
 
 
-# ------------------------------------------------------
-# 🔹 GPT Summary
-# ------------------------------------------------------
-def summarize_topic(text: str) -> str:
+# --------------------------------------------
+# 2️⃣ GPT topic summarizer
+# --------------------------------------------
+def gpt_summarize_topic(topic_id, docs_for_topic):
+    text = " ".join(docs_for_topic)
     try:
-        response = openai.ChatCompletion.create(
+        resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": PROMPT + "\n" + text}],
         )
-        return response.choices[0].message.content
+        out = resp.choices[0].message.content or ""
+        if "SUMMARY:" in out:
+            title_part, summary_part = out.split("SUMMARY:", 1)
+            title = title_part.replace("TITLE:", "").strip()
+            summary = summary_part.strip()
+        else:
+            title = f"TOPIC {topic_id}"
+            summary = out.strip() or "No summary."
+        return {"title": title, "summary": summary}
     except Exception as e:
-        print(f"⚠ GPT summary failed: {e}")
-        return "TITLE: UNKNOWN\nSUMMARY: Failed to generate summary."
-
-
-# ------------------------------------------------------
-# 🔍 Embedding Model
-# ------------------------------------------------------
-def load_embedding_model(topic_model: BERTopic):
-    # If BERTopic already has an embedding model, reuse it for themes
-    if hasattr(topic_model, "embedding_model") and topic_model.embedding_model:
-        return topic_model.embedding_model
-    # Fallback – should rarely be needed if BERTopic is configured
-    return SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-
-
-# ------------------------------------------------------
-# 🚀 CORE ENGINE — generates topics, summaries, embeddings, theme scores
-# ------------------------------------------------------
-def generate_topic_results():
-    print("🚀 Running topic engine...")
-    docs = fetch_rss_articles()
-
-    if not docs:
-        print("❌ No articles. Returning empty response.")
-        return [], {}, None, {}, {}
-
-    # 1️⃣ Topic modeling with BERTopic
-    try:
-        topic_model = BERTopic(nr_topics="auto")
-        topics, probabilities = topic_model.fit_transform(docs)
-    except Exception as e:
-        print(f"❌ BERTopic failed: {e}")
-        return docs, {}, None, {}, {}
-
-    # 2️⃣ Embeddings for articles
-    embedding_model = load_embedding_model(topic_model)
-    try:
-        embeddings = embedding_model.encode(docs, show_progress_bar=False)
-    except Exception as e:
-        print(f"❌ Embedding generation failed: {e}")
-        return docs, {}, topic_model, {}, {}
-
-    # 3️⃣ GPT-based topic summaries (clustered at BERTopic topic level)
-    topic_summaries = {}
-    unique_topics = sorted(set(topics))
-    for topic_id in unique_topics:
-        topic_docs = [docs[i] for i, t in enumerate(topics) if t == topic_id][:3]
-        if not topic_docs:
-            continue
-        combined_text = " ".join(topic_docs).strip()
-        summary_response = summarize_topic(combined_text)
-        title = summary_response.split("SUMMARY:")[0].replace("TITLE:", "").strip()
-        summary_text = summary_response.split("SUMMARY:")[-1].strip()
-        topic_summaries[topic_id] = {
-            "title": title,
-            "summary": summary_text,
-            "status": "NEW",  # NEW/PERSISTENT handled later via dashboard persistence
+        print(f"⚠ GPT error on topic {topic_id}: {e}")
+        return {
+            "title": f"TOPIC {topic_id}",
+            "summary": "Summary generation failed.",
         }
 
-    # 4️⃣ Embedding-based THEMES assignment at ARTICLE level
-    print("🧠 Assigning articles to themes using embeddings...")
+
+# --------------------------------------------
+# 3️⃣ BERTopic model runner (in spirit of your v5.5)
+# --------------------------------------------
+def run_bertopic_analysis(docs):
+    umap_model = UMAP(
+        n_neighbors=15,
+        n_components=2,
+        min_dist=0.1,
+        metric="cosine",
+        random_state=42,
+    )
+    hdbscan_model = HDBSCAN(
+        min_cluster_size=10,
+        metric="euclidean",
+        cluster_selection_method="eom",
+        prediction_data=True,
+    )
+    vectorizer_model = CountVectorizer(
+        stop_words="english",
+        max_df=0.9,
+        min_df=5,
+        ngram_range=(1, 3),
+    )
+
+    topic_model = BERTopic(
+        umap_model=umap_model,
+        hdbscan_model=hdbscan_model,
+        vectorizer_model=vectorizer_model,
+        calculate_probabilities=True,
+        verbose=False,
+    )
+
+    topics, probs = topic_model.fit_transform(docs)
+    return topic_model, topics, probs
+
+
+# --------------------------------------------
+# 4️⃣ Main entry point used by generate_dashboard.py
+# --------------------------------------------
+def generate_topic_results():
+    docs = fetch_articles()
+    if not docs:
+        return [], {}, None, {}, {}
+
+    # BERTopic clustering
+    topic_model, topics, probs = run_bertopic_analysis(docs)
+    topic_info = topic_model.get_topic_info()
+
+    summaries = {}
+    topic_embeddings = {}
+
+    # Topic-level summaries + embeddings (used for persistence & topic map)
+    for topic_id in topic_info.Topic:
+        if topic_id == -1:
+            continue
+        doc_indices = [i for i, t in enumerate(topics) if t == topic_id]
+        if not doc_indices:
+            continue
+        topic_docs = [docs[i] for i in doc_indices[:5]]
+        summaries[topic_id] = gpt_summarize_topic(topic_id, topic_docs)
+
+        # Map topic id -> embedding vector (as list for JSON)
+        topic_embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
+
+    # ------------------------------------------------
+    # 5️⃣ Article→theme assignment via embeddings
+    # ------------------------------------------------
     try:
-        theme_embeddings = embedding_model.encode(THEMES, show_progress_bar=False)
+        # Article embeddings from same model BERTopic used
+        article_embeddings = topic_model._embedding_model.encode(
+            docs, show_progress_bar=False
+        )
+        # Theme embeddings using same model (same dimensionality)
+        theme_embeddings = topic_model._embedding_model.encode(
+            THEMES, show_progress_bar=False
+        )
     except Exception as e:
-        print(f"⚠ Theme embedding failed, falling back to Others-only. Error: {e}")
+        print(f"⚠ Embedding-based theme assignment failed: {e}")
+        # Fallback: everything in Others
         theme_metrics = {theme: {"volume": 0, "centrality": 0.0} for theme in THEMES}
         theme_metrics["Others"] = {"volume": len(docs), "centrality": 0.0}
-        print("📊 Theme metrics (fallback):", theme_metrics)
-        return docs, topic_summaries, topic_model, embeddings, theme_metrics
+        return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
-    # Initialize metrics
     theme_metrics = {theme: {"volume": 0, "centrality": 0.0} for theme in THEMES}
     theme_metrics["Others"] = {"volume": 0, "centrality": 0.0}
 
-    # For each article embedding, find the closest theme
-    for emb in embeddings:
+    for emb in article_embeddings:
         sims = cosine_similarity([emb], theme_embeddings)[0]
         best_idx = int(np.argmax(sims))
-        best_score = sims[best_idx]
+        best_score = float(sims[best_idx])
         if best_score >= SIMILARITY_THRESHOLD:
             assigned_theme = THEMES[best_idx]
         else:
             assigned_theme = "Others"
         theme_metrics[assigned_theme]["volume"] += 1
 
-    print("📊 Theme metrics (volume only, centrality=0 for now):", theme_metrics)
+    print("📊 Theme metrics (volume only):", theme_metrics)
 
-    # 5️⃣ Return everything for the dashboard
-    # embeddings is a numpy array; generate_dashboard iterates over it and saves by index
-    return docs, topic_summaries, topic_model, embeddings, theme_metrics
+    # NOTE:
+    # - summaries is a dict keyed by topic_id (BERTopic topics)
+    # - topic_embeddings is a dict keyed by topic_id (used for persistence)
+    # - theme_metrics is article-level theme volume (centrality 0.0 for now;
+    #   dashboard computes ranks and deltas)
+    return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
 
-# ------------------------------------------------------
-# 🧪 Debug Run
-# ------------------------------------------------------
+# --------------------------------------------
+# Local debug
+# --------------------------------------------
 if __name__ == "__main__":
-    docs, summaries, model, emb, themes = generate_topic_results()
-    print("🧪 DEBUG – theme metrics:")
-    print(json.dumps(themes, indent=2))
+    d, s, m, e, tm = generate_topic_results()
+    print(f"Docs: {len(d)}, topics: {len(s)}")
+    print("Themes:", tm)
