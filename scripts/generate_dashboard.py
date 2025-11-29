@@ -7,8 +7,6 @@ import os
 import json
 from jinja2 import Environment, FileSystemLoader
 import plotly.graph_objects as go
-import numpy as np
-from sklearn.metrics.pairwise import cosine_similarity
 
 from LDA_engine_with_BERTopic_v054 import generate_topic_results
 
@@ -27,14 +25,12 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 TOPIC_PERSISTENCE_JSON = os.path.join(OUTPUT_DIR, "yesterday_topics.json")
 THEME_SIGNALS_JSON = os.path.join(OUTPUT_DIR, "yesterday_theme_signals.json")
 
-# Centrality threshold (similarity)
-CENTRALITY_SIMILARITY_THRESHOLD = 0.6
-
 
 # --------------------------------------------
 # Helper functions
 # --------------------------------------------
 def _save_topic_embeddings(embeddings, topic_summaries):
+    """Persist topic embeddings for NEW/PERSISTENT status tomorrow."""
     try:
         with open(TOPIC_PERSISTENCE_JSON, "w", encoding="utf-8") as f:
             json.dump(
@@ -45,13 +41,16 @@ def _save_topic_embeddings(embeddings, topic_summaries):
                     }
                     for k in embeddings
                 },
-                f, indent=2)
+                f,
+                indent=2,
+            )
         print(f"📁 Saved topic persistence file → {TOPIC_PERSISTENCE_JSON}")
     except Exception as e:
         print(f"❌ Error saving topic JSON: {e}")
 
 
 def _load_previous_theme_signals():
+    """Load yesterday's theme metrics for topicality deltas."""
     if not os.path.exists(THEME_SIGNALS_JSON):
         print("🟡 No previous theme signals found – first-run conditions.")
         return {}
@@ -64,6 +63,7 @@ def _load_previous_theme_signals():
 
 
 def _save_theme_signals(theme_metrics):
+    """Persist today's theme metrics for tomorrow."""
     try:
         with open(THEME_SIGNALS_JSON, "w", encoding="utf-8") as f:
             json.dump(theme_metrics, f, indent=2)
@@ -73,6 +73,7 @@ def _save_theme_signals(theme_metrics):
 
 
 def _stretch_figure(fig):
+    """Make Plotly figures fill container (HTML controls size)."""
     fig.update_layout(
         autosize=True,
         height=None,
@@ -83,6 +84,7 @@ def _stretch_figure(fig):
 
 
 def _build_theme_map_html(theme_signals, total_docs):
+    """Build Theme Distance Map HTML."""
     if not theme_signals:
         return "<p>No theme visualization available.</p>"
 
@@ -91,20 +93,22 @@ def _build_theme_map_html(theme_signals, total_docs):
         xs = [theme_signals[t]["topicality"] for t in themes]
         ys = [theme_signals[t]["centrality"] for t in themes]
 
-        fig = go.Figure(data=[
-            go.Scatter(
-                x=xs,
-                y=ys,
-                mode="markers+text",
-                text=themes,
-                textposition="top center",
-            )
-        ])
+        fig = go.Figure(
+            data=[
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="markers+text",
+                    text=themes,
+                    textposition="top center",
+                )
+            ]
+        )
 
         fig.update_layout(
             title=f"Theme Distance Map (Centrality vs Δ Volume) – {total_docs} articles",
             xaxis_title="Topicality (Δ news volume vs prior day)",
-            yaxis_title="Centrality (semantic theme overlap)",
+            yaxis_title="Centrality",
             autosize=True,
         )
 
@@ -121,6 +125,7 @@ def _build_theme_map_html(theme_signals, total_docs):
 def generate_dashboard():
     print("🚀 Generating upgraded dashboard...")
 
+    # Expect: docs, topic_summaries, topic_model, embeddings, theme_scores
     docs, topic_summaries, topic_model, embeddings, theme_scores = generate_topic_results()
     total_docs = len(docs)
 
@@ -131,86 +136,88 @@ def generate_dashboard():
         print("⚠️ Dashboard fallback created.")
         return
 
+    # 1️⃣ Save topic embeddings for persistence logic
     _save_topic_embeddings(embeddings, topic_summaries)
 
+    # 2️⃣ Topic map
     try:
         fig_topics = topic_model.visualize_topics()
         fig_topics = _stretch_figure(fig_topics)
         html_topic_map = fig_topics.to_html(full_html=False)
-    except:
+    except Exception as e:
+        print(f"⚠️ Error generating topic map: {e}")
         html_topic_map = "<p>No topic map available.</p>"
 
-    # ️⃣ Improved theme logic
+    # 3️⃣ Theme metrics – start from engine output
     prev_data = _load_previous_theme_signals()
     theme_metrics = {}
 
-    # 1. Start with predefined categories
+    # Base from engine's theme_scores
     for theme, info in theme_scores.items():
         theme_metrics[theme] = {
             "volume": int(info.get("volume", 0)),
             "centrality": float(info.get("centrality", 0.0)),
         }
 
-    # 2. Add “Others” theme if missing volume
-    total_theme_volume = sum([v["volume"] for v in theme_metrics.values()])
+    # Ensure "Others" theme exists & totals add up
+    total_theme_volume = sum(v["volume"] for v in theme_metrics.values())
     if total_docs > total_theme_volume:
-        theme_metrics["Others"] = {
-            "volume": total_docs - total_theme_volume,
-            "centrality": 0.0  # No similarity data yet
-        }
+        # Add or adjust Others
+        others_volume = total_docs - total_theme_volume
+        if "Others" in theme_metrics:
+            theme_metrics["Others"]["volume"] += others_volume
+        else:
+            theme_metrics["Others"] = {
+                "volume": others_volume,
+                "centrality": 0.0,
+            }
 
-    # 3. Centrality based on embedding proximity
-    themes = list(theme_metrics.keys())
-    vectors = np.array([
-        embeddings.get(theme, [0]*len(list(embeddings.values())[0])) for theme in themes
-    ])
-
-    for i, theme in enumerate(themes):
-        sim_scores = cosine_similarity([vectors[i]], vectors)[0]
-        centrality = sum(sim_scores > CENTRALITY_SIMILARITY_THRESHOLD) - 1
-        theme_metrics[theme]["centrality"] = centrality
-
-    # 4. Topicality remains Δ volume (your request)
-    for theme in theme_metrics:
+    # 4️⃣ Topicality = Δ volume vs prior day (keep as requested)
+    for theme, m in theme_metrics.items():
         prev_volume = prev_data.get(theme, {}).get("volume", 0)
-        theme_metrics[theme]["topicality"] = theme_metrics[theme]["volume"] - prev_volume
+        m["topicality"] = m["volume"] - prev_volume
 
-    # 5. Rank ordering
+    # 5️⃣ Rank ordering
     for metric in ["centrality", "topicality"]:
         ranked = sorted(theme_metrics.items(), key=lambda x: -x[1][metric])
         for rank, (theme, _) in enumerate(ranked, start=1):
             theme_metrics[theme][f"{metric}_rank"] = rank
 
-    # 6. Round values correctly (action 1)
+    # 6️⃣ Build theme_signals for template, with gentle rounding
     theme_signals = {
         theme: {
             "centrality": round(m["centrality"], 3),
             "topicality": round(m["topicality"], 3),
-            "centrality_rank": m["centrality_rank"],
-            "topicality_rank": m["topicality_rank"],
-            "volume": m["volume"]
+            "centrality_rank": m.get("centrality_rank"),
+            "topicality_rank": m.get("topicality_rank"),
+            "volume": m.get("volume", 0),
+            "prev_centrality": prev_data.get(theme, {}).get("centrality"),
+            "prev_topicality": prev_data.get(theme, {}).get("topicality"),
+            "prev_centrality_rank": prev_data.get(theme, {}).get("centrality_rank"),
+            "prev_topicality_rank": prev_data.get(theme, {}).get("topicality_rank"),
         }
         for theme, m in theme_metrics.items()
     }
 
-    _save_theme_signals(theme_signals)
+    # 7️⃣ Save today's theme metrics for tomorrow
+    _save_theme_signals(theme_metrics)
 
-    # 7. Generate Theme Map
+    # 8️⃣ Theme map HTML
     html_theme_map = _build_theme_map_html(theme_signals, total_docs)
 
-    # 8. Prepare Summary List
+    # 9️⃣ Prepare summaries for template
     summary_list = [
         {
             "topic_id": k,
-            "title": v["title"],
-            "summary": v["summary"].replace("\n", "<br>"),
+            "title": v.get("title", ""),
+            "summary": v.get("summary", "").replace("\n", "<br>"),
             "is_new": v.get("status") == "NEW",
             "is_persistent": v.get("status") == "PERSISTENT",
         }
         for k, v in topic_summaries.items()
     ]
 
-    # 9. Render Dashboard
+    # 🔟 Render dashboard
     env = Environment(loader=FileSystemLoader("templates"))
     template = env.get_template("dashboard_template.html")
     rendered_html = template.render(
