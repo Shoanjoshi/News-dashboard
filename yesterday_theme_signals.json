@@ -1,64 +1,64 @@
 {
   "Recessionary pressures": {
-    "volume": 0,
+    "volume": 30,
     "centrality": 0.0,
-    "topicality": 0,
+    "topicality": 30,
     "centrality_rank": 1,
-    "topicality_rank": 2
-  },
-  "Inflation": {
-    "volume": 0,
-    "centrality": 0.0,
-    "topicality": 0,
-    "centrality_rank": 2,
     "topicality_rank": 3
   },
+  "Inflation": {
+    "volume": 42,
+    "centrality": 0.0,
+    "topicality": 42,
+    "centrality_rank": 2,
+    "topicality_rank": 2
+  },
   "Private credit": {
-    "volume": 0,
+    "volume": 9,
     "centrality": 0.0,
-    "topicality": 0,
+    "topicality": 9,
     "centrality_rank": 3,
-    "topicality_rank": 4
-  },
-  "AI": {
-    "volume": 0,
-    "centrality": 0.0,
-    "topicality": 0,
-    "centrality_rank": 4,
-    "topicality_rank": 5
-  },
-  "Cyber attacks": {
-    "volume": 0,
-    "centrality": 0.0,
-    "topicality": 0,
-    "centrality_rank": 5,
-    "topicality_rank": 6
-  },
-  "Commercial real estate": {
-    "volume": 0,
-    "centrality": 0.0,
-    "topicality": 0,
-    "centrality_rank": 6,
-    "topicality_rank": 7
-  },
-  "Consumer debt": {
-    "volume": 0,
-    "centrality": 0.0,
-    "topicality": 0,
-    "centrality_rank": 7,
     "topicality_rank": 8
   },
-  "Bank lending and credit risk": {
-    "volume": 0,
+  "AI": {
+    "volume": 11,
     "centrality": 0.0,
-    "topicality": 0,
-    "centrality_rank": 8,
+    "topicality": 11,
+    "centrality_rank": 4,
+    "topicality_rank": 6
+  },
+  "Cyber attacks": {
+    "volume": 11,
+    "centrality": 0.0,
+    "topicality": 11,
+    "centrality_rank": 5,
+    "topicality_rank": 7
+  },
+  "Commercial real estate": {
+    "volume": 17,
+    "centrality": 0.0,
+    "topicality": 17,
+    "centrality_rank": 6,
+    "topicality_rank": 5
+  },
+  "Consumer debt": {
+    "volume": 8,
+    "centrality": 0.0,
+    "topicality": 8,
+    "centrality_rank": 7,
     "topicality_rank": 9
   },
-  "Others": {
-    "volume": 214,
+  "Bank lending and credit risk": {
+    "volume": 18,
     "centrality": 0.0,
-    "topicality": 214,
+    "topicality": 18,
+    "centrality_rank": 8,
+    "topicality_rank": 4
+  },
+  "Others": {
+    "volume": 68,
+    "centrality": 0.0,
+    "topicality": 68,
     "centrality_rank": 9,
     "topicality_rank": 1
   }
