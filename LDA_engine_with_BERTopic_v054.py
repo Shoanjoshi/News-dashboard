@@ -1,20 +1,22 @@
 # ============================================
-# 📄 LDA_engine_with_BERTopic_v054.py
-# Reconstructed stable engine with:
-# - BERTopic clustering + topic summaries
-# - Topic embeddings for persistence
-# - Embedding-based article→theme assignment (with "Others")
+# LDA_engine_with_BERTopic_v054.py
+# Stable engine with:
+#  - BERTopic clustering + GPT summaries
+#  - Article embeddings with MiniLM
+#  - Embedding-based article→theme assignment (+Others)
 # ============================================
 
 import os
 import feedparser
 import numpy as np
+
 from openai import OpenAI
 from bertopic import BERTopic
 from hdbscan import HDBSCAN
 from umap import UMAP
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 
 # --------------------------------------------
 # OpenAI client
@@ -22,7 +24,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # --------------------------------------------
-# RSS feeds – RESTORED from your config
+# RSS feeds – restored from your config
 # --------------------------------------------
 RSS_FEEDS = [
     # US Economic & Business
@@ -77,8 +79,8 @@ THEMES = [
     "Bank lending and credit risk",
 ]
 
-# looser threshold so not everything falls into Others
-SIMILARITY_THRESHOLD = 0.30
+# similarity threshold for assigning an article to a named theme
+SIMILARITY_THRESHOLD = 0.15
 
 PROMPT = """You are preparing a factual briefing. Summarize the topic strictly based on the information provided.
 Do not infer impact, sentiment, or implications. Avoid subjective language, predictions, or assumptions.
@@ -87,6 +89,15 @@ Use neutral, objective tone.
 STRICT FORMAT ONLY:
 TITLE: <3–5 WORDS, UPPERCASE, factual>
 SUMMARY: <2–3 concise factual sentences. No speculation.>"""
+
+
+# --------------------------------------------
+# Helper: L2-normalize embedding rows
+# --------------------------------------------
+def _normalize_rows(mat: np.ndarray) -> np.ndarray:
+    norms = np.linalg.norm(mat, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    return mat / norms
 
 
 # --------------------------------------------
@@ -121,7 +132,7 @@ def fetch_articles():
 # 2️⃣ GPT topic summarizer
 # --------------------------------------------
 def gpt_summarize_topic(topic_id, docs_for_topic):
-    text = " ".join(docs_for_topic)
+    text = "\n".join(docs_for_topic)  # keep docs visually separated
     try:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -145,7 +156,7 @@ def gpt_summarize_topic(topic_id, docs_for_topic):
 
 
 # --------------------------------------------
-# 3️⃣ BERTopic model runner (in spirit of your v5.5)
+# 3️⃣ BERTopic model runner
 # --------------------------------------------
 def run_bertopic_analysis(docs):
     umap_model = UMAP(
@@ -156,8 +167,8 @@ def run_bertopic_analysis(docs):
         random_state=42,
     )
     hdbscan_model = HDBSCAN(
-        min_cluster_size=10,
-        metric="euclidean",
+        min_cluster_size=3,          # allow smaller clusters to avoid all-noise
+        metric="cosine",
         cluster_selection_method="eom",
         prediction_data=True,
     )
@@ -195,10 +206,10 @@ def generate_topic_results():
     summaries = {}
     topic_embeddings = {}
 
-    # Topic-level summaries + embeddings (used for persistence & topic map)
-    for topic_id in topic_info.Topic:
-        if topic_id == -1:
-            continue
+    # If everything is noise, we will still return empty topics
+    valid_topic_ids = [t for t in topic_info.Topic if t != -1]
+
+    for topic_id in valid_topic_ids:
         doc_indices = [i for i, t in enumerate(topics) if t == topic_id]
         if not doc_indices:
             continue
@@ -209,17 +220,21 @@ def generate_topic_results():
         topic_embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
 
     # ------------------------------------------------
-    # 5️⃣ Article→theme assignment via embeddings
+    # 5️⃣ Article→theme assignment via SentenceTransformer embeddings
     # ------------------------------------------------
     try:
-        # Article embeddings from same model BERTopic used
-        article_embeddings = topic_model._embedding_model.encode(
+        embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
+        article_embeddings = embedding_model.encode(
             docs, show_progress_bar=False
         )
-        # Theme embeddings using same model (same dimensionality)
-        theme_embeddings = topic_model._embedding_model.encode(
+        article_embeddings = _normalize_rows(np.array(article_embeddings))
+
+        theme_embeddings = embedding_model.encode(
             THEMES, show_progress_bar=False
         )
+        theme_embeddings = _normalize_rows(np.array(theme_embeddings))
+
     except Exception as e:
         print(f"⚠ Embedding-based theme assignment failed: {e}")
         # Fallback: everything in Others
@@ -242,11 +257,9 @@ def generate_topic_results():
 
     print("📊 Theme metrics (volume only):", theme_metrics)
 
-    # NOTE:
-    # - summaries is a dict keyed by topic_id (BERTopic topics)
-    # - topic_embeddings is a dict keyed by topic_id (used for persistence)
-    # - theme_metrics is article-level theme volume (centrality 0.0 for now;
-    #   dashboard computes ranks and deltas)
+    # summaries: dict keyed by topic_id
+    # topic_embeddings: dict keyed by topic_id
+    # theme_metrics: article-level theme volume (centrality=0.0; dashboard adds ranks/deltas)
     return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
 
@@ -257,4 +270,3 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
-
