@@ -163,8 +163,8 @@ def run_bertopic_analysis(docs):
     )
     vectorizer_model = CountVectorizer(
         stop_words="english",
-        max_df=0.9,
-        min_df=5,
+        max_df=1.0,
+        min_df=2,
         ngram_range=(1, 3),
     )
 
@@ -257,3 +257,4 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
