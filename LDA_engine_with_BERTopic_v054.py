@@ -260,6 +260,25 @@ def generate_topic_results():
     # summaries: dict keyed by topic_id
     # topic_embeddings: dict keyed by topic_id
     # theme_metrics: article-level theme volume (centrality=0.0; dashboard adds ranks/deltas)
+    
+    #TEMPORARY DIAGNOSTICS
+    from collections import Counter
+    print("\n=== DEBUG: BERTopic Topic Info ===")
+    print(topic_info)
+    
+    print("\n=== DEBUG: Topic Distribution ===")
+    print(Counter(topics))
+    
+    # Print small sample of clustered docs
+    sample_topic = next((t for t in topic_info.Topic if t != -1), None)
+    if sample_topic is not None:
+        doc_indices = [i for i, t in enumerate(topics) if t == sample_topic]
+        print(f"\n🧪 DEBUG: Sample Docs for Topic {sample_topic}\n")
+        for idx in doc_indices[:3]:
+            print(f"Doc {idx}:\n{docs[idx][:250]}\n")
+    else:
+        print("⚠ DEBUG: No non-noise topics detected.")
+      
     return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
 
@@ -270,3 +289,4 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
