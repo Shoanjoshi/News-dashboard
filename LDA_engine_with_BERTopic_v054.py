@@ -211,7 +211,7 @@ def run_bertopic_analysis(docs):
     hdbscan_model = HDBSCAN(
         min_cluster_size=5,
         min_samples=1,
-        metric="euclidean",
+        metric="cosine",
         cluster_selection_method="eom",
         prediction_data=True,
     )
@@ -332,6 +332,7 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
 
 
 
