@@ -1,8 +1,8 @@
 {
   "Recessionary pressures": {
-    "volume": 33,
+    "volume": 34,
     "centrality": 0.0,
-    "topicality": 33,
+    "topicality": 34,
     "centrality_rank": 1,
     "topicality_rank": 3
   },
@@ -32,21 +32,21 @@
     "centrality": 0.0,
     "topicality": 8,
     "centrality_rank": 5,
-    "topicality_rank": 9
+    "topicality_rank": 8
   },
   "Commercial real estate": {
-    "volume": 22,
+    "volume": 21,
     "centrality": 0.0,
-    "topicality": 22,
+    "topicality": 21,
     "centrality_rank": 6,
     "topicality_rank": 4
   },
   "Consumer debt": {
-    "volume": 9,
+    "volume": 8,
     "centrality": 0.0,
-    "topicality": 9,
+    "topicality": 8,
     "centrality_rank": 7,
-    "topicality_rank": 8
+    "topicality_rank": 9
   },
   "Bank lending and credit risk": {
     "volume": 19,
@@ -56,9 +56,9 @@
     "topicality_rank": 5
   },
   "Others": {
-    "volume": 60,
+    "volume": 61,
     "centrality": 0.0,
-    "topicality": 60,
+    "topicality": 61,
     "centrality_rank": 9,
     "topicality_rank": 1
   }
