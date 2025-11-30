@@ -132,21 +132,63 @@ def fetch_articles():
 # 2️⃣ GPT topic summarizer
 # --------------------------------------------
 def gpt_summarize_topic(topic_id, docs_for_topic):
-    text = "\n".join(docs_for_topic)  # keep docs visually separated
+    """
+    Summarize a topic using the top 10 documents or top 10% of documents
+    (whichever is smaller), with bullet-style separation per article.
+    Prevents merging ideas from different sources.
+    """
+    MAX_ARTICLES = 10
+    num_docs_for_summary = max(1, min(MAX_ARTICLES, len(docs_for_topic), len(docs_for_topic) // 10 or 1))
+    docs_selected = docs_for_topic[:num_docs_for_summary]
+
+    # Separate docs clearly for summarization
+    text = "\n\n".join([f"ARTICLE {i+1}:\n{doc}" for i, doc in enumerate(docs_selected)])
+
+    prompt = f"""
+You are preparing a factual briefing. Summarize the topic strictly based on the information provided.
+Use neutral, objective tone. Do not infer impact, sentiment, predictions, or subjective statements.
+
+STRICT FORMAT ONLY:
+
+TITLE: <3–5 WORDS, UPPERCASE>
+
+KEY POINTS:
+- Write ONE factual bullet per article maximum.
+- Each bullet must correspond to a separate article.
+- NO merging ideas across articles.
+- Only core factual statements. No speculation.
+
+Now summarize the following articles:
+
+{text}
+"""
+
     try:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[{"role": "user", "content": PROMPT + "\n" + text}],
+            messages=[{"role": "user", "content": prompt}],
         )
         out = resp.choices[0].message.content or ""
-        if "SUMMARY:" in out:
-            title_part, summary_part = out.split("SUMMARY:", 1)
-            title = title_part.replace("TITLE:", "").strip()
-            summary = summary_part.strip()
+
+        # If output follows strict format:
+        if "TITLE:" in out:
+            parts = out.split("TITLE:", 1)[1].split("\n", 1)
+            title = parts[0].strip()
+            summary_text = parts[1].strip()
+
+            # Convert bullets to HTML-safe format for dashboard
+            summary_lines = [
+                f"• {line.strip('-• ').strip()}"
+                for line in summary_text.split("\n")
+                if line.strip()
+            ]
+            summary_formatted = "<br>".join(summary_lines)
         else:
             title = f"TOPIC {topic_id}"
-            summary = out.strip() or "No summary."
-        return {"title": title, "summary": summary}
+            summary_formatted = "Summary format incorrect."
+
+        return {"title": title, "summary": summary_formatted}
+
     except Exception as e:
         print(f"⚠ GPT error on topic {topic_id}: {e}")
         return {
@@ -290,5 +332,6 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
 
 
