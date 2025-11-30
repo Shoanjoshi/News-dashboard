@@ -160,14 +160,15 @@ def gpt_summarize_topic(topic_id, docs_for_topic):
 # --------------------------------------------
 def run_bertopic_analysis(docs):
     umap_model = UMAP(
-        n_neighbors=15,
+        n_neighbors=30,
         n_components=2,
-        min_dist=0.1,
+        min_dist=0.0,
         metric="cosine",
         random_state=42,
     )
     hdbscan_model = HDBSCAN(
-        min_cluster_size=3,         # lowered from 5 to 3 for more clusters
+        min_cluster_size=5,
+        min_samples=1,
         metric="euclidean",
         cluster_selection_method="eom",
         prediction_data=True,
@@ -289,4 +290,5 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
 
