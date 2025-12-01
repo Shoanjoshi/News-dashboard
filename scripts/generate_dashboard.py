@@ -211,11 +211,13 @@ def generate_dashboard():
             "topic_id": k,
             "title": v.get("title", ""),
             "summary": v.get("summary", "").replace("\n", "<br>"),
+            "article_count": v.get("article_count", None),   # NEW FIELD
             "is_new": v.get("status") == "NEW",
             "is_persistent": v.get("status") == "PERSISTENT",
         }
         for k, v in topic_summaries.items()
     ]
+
 
     # 🔟 Render dashboard
     env = Environment(loader=FileSystemLoader("templates"))
