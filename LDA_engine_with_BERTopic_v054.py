@@ -179,9 +179,9 @@ Now summarize the following articles:
 
 def run_bertopic_analysis(docs):
     umap_model = UMAP(
-        n_neighbors=30,
+        n_neighbors=15, 
         n_components=2,
-        min_dist=0.0,
+        min_dist=0.1,
         metric="cosine",
         random_state=42,
     )
@@ -298,3 +298,4 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
