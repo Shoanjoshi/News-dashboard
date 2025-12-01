@@ -97,7 +97,7 @@ THEMES = [
     "Bank lending and credit risk",
 ]
 
-SIMILARITY_THRESHOLD = 0.15
+SIMILARITY_THRESHOLD = 0.20
 
 PROMPT = """You are preparing a factual briefing. Summarize the topic strictly based on the information provided.
 Do not infer impact, sentiment, or implications. Avoid subjective language, predictions, or assumptions.
@@ -266,14 +266,56 @@ def generate_topic_results():
     theme_metrics = {t: {"volume": 0, "centrality": 0.0} for t in THEMES}
     theme_metrics["Others"] = {"volume": 0, "centrality": 0.0}
 
-    for emb in article_embeddings:
+    # Multi-theme assignment + centrality overlap tracking
+    theme_metrics = {
+        theme: {"volume": 0, "centrality": 0.0, "articles": set()}
+        for theme in THEMES
+    }
+    theme_metrics["Others"] = {"volume": 0, "centrality": 0.0, "articles": set()}
+    
+    article_theme_map = []  # Store the assigned themes per article for overlap logic
+    
+    for i, emb in enumerate(article_embeddings):
         sims = cosine_similarity([emb], theme_embeddings)[0]
-        best_idx = int(np.argmax(sims))
-        if sims[best_idx] >= SIMILARITY_THRESHOLD:
-            theme = THEMES[best_idx]
-        else:
-            theme = "Others"
-        theme_metrics[theme]["volume"] += 1
+        
+        # Assign all themes above threshold
+        assigned_themes = [
+            THEMES[idx]
+            for idx, score in enumerate(sims)
+            if score >= SIMILARITY_THRESHOLD
+        ]
+    
+        if not assigned_themes:
+            assigned_themes = ["Others"]
+    
+        article_theme_map.append(assigned_themes)
+    
+        # Update topicality (volume) and track mentions
+        for theme in assigned_themes:
+            theme_metrics[theme]["volume"] += 1
+            theme_metrics[theme]["articles"].add(i)
+    
+    # ---- Calculate centrality (theme overlap logic) ----
+    for theme in THEMES:  # Skip "Others"
+        overlaps = 0
+        theme_articles = theme_metrics[theme]["articles"]
+        
+        for other_theme in THEMES:
+            if other_theme != theme:
+                other_articles = theme_metrics[other_theme]["articles"]
+                overlaps += len(theme_articles.intersection(other_articles))
+        
+        theme_metrics[theme]["centrality_raw"] = overlaps
+    
+    # Normalize centrality (0–1 scale)
+    max_overlap = max([theme_metrics[t]["centrality_raw"] for t in THEMES]) or 1
+    for theme in THEMES:
+        theme_metrics[theme]["centrality"] = theme_metrics[theme]["centrality_raw"] / max_overlap
+    
+    # Clear helper fields
+    for t in theme_metrics:
+        theme_metrics[t].pop("articles", None)
+        theme_metrics[t].pop("centrality_raw", None)
 
     print(f"📊 Theme metrics (volume only): {theme_metrics}")
     print("\n=== DEBUG: Topic Distribution ===\n", Counter(topics))
@@ -287,3 +329,4 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
