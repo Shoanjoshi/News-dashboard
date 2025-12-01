@@ -1,9 +1,11 @@
+
 # ============================================
 # LDA_engine_with_BERTopic_v_fixed_clusters.py
 # Stable engine with:
 #  - BERTopic clustering using fixed clusters via KMeans
-#  - GPT summaries with bullet logic
+#  - GPT summaries with holistic topic summaries
 #  - Expanded RSS feeds (NYT, WaPo, Cybersecurity sources)
+#  - Multi-theme assignment for topicality & centrality
 # ============================================
 
 import os
@@ -67,25 +69,38 @@ RSS_FEEDS = [
 
     # NEW FEED ADDITIONS FOR VARIETY
 
-    ## Major US newspapers
+    # Major US newspapers
     "https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml",
     "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
     "https://feeds.washingtonpost.com/rss/business",
     "https://feeds.washingtonpost.com/rss/business/economy",
 
-    ## Cybersecurity feeds
+    # Cybersecurity feeds
     "https://krebsonsecurity.com/feed/",
     "https://www.bleepingcomputer.com/feed/",
     "https://www.darkreading.com/rss.xml",
     "https://www.scmagazine.com/section/feed",
 
-    ## Technology + risk
+    # Technology + risk
     "https://feeds.arstechnica.com/arstechnica/technology-lab",
 ]
 
 # --------------------------------------------
-# Themes (unchanged here)
+# Theme definitions
 # --------------------------------------------
+
+# Core theme labels (no "Others" here)
+THEMES = [
+    "Recessionary pressures",
+    "Inflation",
+    "Private credit",
+    "AI",
+    "Cyber attacks",
+    "Commercial real estate",
+    "Consumer debt",
+    "Bank lending and credit risk",
+]
+
 THEME_DESCRIPTIONS = {
     "Recessionary pressures": "Economic slowdown, declining demand, unemployment risk, or business contraction.",
     "Inflation": "Persistent price increases and monetary policy response impacting costs and purchasing power.",
@@ -98,7 +113,9 @@ THEME_DESCRIPTIONS = {
     "Others": "Articles not directly linked to financial systemic themes.",
 }
 
-SIMILARITY_THRESHOLD = 0.20
+SIMILARITY_THRESHOLD = 0.20  # for assigning themes
+
+
 # --------------------------------------------
 # Helper normalization
 # --------------------------------------------
@@ -106,6 +123,7 @@ def _normalize_rows(mat: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(mat, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     return mat / norms
+
 
 # --------------------------------------------
 # Fetch articles
@@ -134,19 +152,18 @@ def fetch_articles():
         print(f"📌 Sample article: {docs[0][:120]}")
     return docs
 
+
 # --------------------------------------------
-# GPT topic summarizer
+# GPT topic summarizer (holistic)
 # --------------------------------------------
 def gpt_summarize_topic(topic_id, docs_for_topic):
     """
     Improved topic summarization using representative docs with holistic summary.
     Ensures summaries match topic map keywords and removes bullet formatting.
     """
-
     MAX_SUMMARY_DOCS = 8  # use more docs for better representation
     docs_selected = docs_for_topic[:MAX_SUMMARY_DOCS]
 
-    # Clear separation between documents
     text = "\n\n".join([f"ARTICLE:\n{doc}" for doc in docs_selected])
 
     prompt = f"""
@@ -170,12 +187,11 @@ Content to analyze:
         )
         out = resp.choices[0].message.content or ""
 
-        if "TITLE:" in out:
+        if "TITLE:" in out and "SUMMARY:" in out:
             parts = out.split("TITLE:", 1)[1].split("SUMMARY:", 1)
             title = parts[0].strip()
             summary_text = parts[1].strip()
-
-            summary_formatted = summary_text.replace("\n", " ")  # single paragraph
+            summary_formatted = summary_text.replace("\n", " ")
         else:
             title = f"TOPIC {topic_id}"
             summary_formatted = "Summary format incorrect."
@@ -188,6 +204,7 @@ Content to analyze:
             "title": f"TOPIC {topic_id}",
             "summary": "Summary generation failed.",
         }
+
 
 # --------------------------------------------
 # BERTopic model (fixed clusters)
@@ -216,7 +233,7 @@ def run_bertopic_analysis(docs):
 
     topic_model = BERTopic(
         umap_model=umap_model,
-        hdbscan_model=kmeans_model,  # Forces fixed number of clusters
+        hdbscan_model=kmeans_model,  # keep as-is per your working setup
         vectorizer_model=vectorizer_model,
         calculate_probabilities=True,
         verbose=False,
@@ -224,6 +241,7 @@ def run_bertopic_analysis(docs):
 
     topics, probs = topic_model.fit_transform(docs)
     return topic_model, topics, probs
+
 
 # --------------------------------------------
 # Main engine
@@ -240,7 +258,7 @@ def generate_topic_results():
     summaries, topic_embeddings = {}, {}
 
     if len(valid_topic_ids) < 5:
-        print("⚠ Only {} topics detected — activating fallback segmentation.".format(len(valid_topic_ids)))
+        print(f"⚠ Only {len(valid_topic_ids)} topics detected — but continuing with KMeans output.")
 
     for topic_id in valid_topic_ids:
         doc_indices = [i for i, t in enumerate(topics) if t == topic_id]
@@ -250,86 +268,90 @@ def generate_topic_results():
         summaries[topic_id] = gpt_summarize_topic(topic_id, topic_docs)
         topic_embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
 
+    # ------------------------------------------------
+    # Article→theme assignment via SentenceTransformer embeddings
+    # ------------------------------------------------
     try:
         embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+
+        # Encode articles
         article_embeddings = embedding_model.encode(
             docs, show_progress_bar=False
         )
-        article_embeddings = _normalize_rows(np.array(article_embeddings))    
-        # 🆕 Concatenate theme name with description before embedding
+        article_embeddings = _normalize_rows(np.array(article_embeddings))
+
+        # Encode themes using title + description (no Others here)
         theme_texts = [
             f"{theme}. {THEME_DESCRIPTIONS.get(theme, '')}"
             for theme in THEMES
         ]
-        theme_texts.append("Others. General or unrelated articles not clearly tied to defined financial risk themes.")    
         theme_embeddings = embedding_model.encode(
             theme_texts, show_progress_bar=False
         )
         theme_embeddings = _normalize_rows(np.array(theme_embeddings))
+
     except Exception as e:
         print(f"⚠ Embedding-based theme assignment failed: {e}")
         theme_metrics = {t: {"volume": 0, "centrality": 0.0} for t in THEMES}
         theme_metrics["Others"] = {"volume": len(docs), "centrality": 0.0}
         return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
-    theme_metrics = {t: {"volume": 0, "centrality": 0.0} for t in THEMES}
-    theme_metrics["Others"] = {"volume": 0, "centrality": 0.0}
-
-    # Multi-theme assignment + centrality overlap tracking
+    # Initialize theme metrics (include Others)
     theme_metrics = {
-        theme: {"volume": 0, "centrality": 0.0, "articles": set()}
-        for theme in THEMES
+        t: {"volume": 0, "centrality": 0.0, "articles": set()}
+        for t in THEMES
     }
     theme_metrics["Others"] = {"volume": 0, "centrality": 0.0, "articles": set()}
-    
-    article_theme_map = []  # Store the assigned themes per article for overlap logic
-    
+
+    # Multi-theme assignment: each article can map to 0..N themes
     for i, emb in enumerate(article_embeddings):
         sims = cosine_similarity([emb], theme_embeddings)[0]
-        
-        # Assign all themes above threshold
+
         assigned_themes = [
             THEMES[idx]
             for idx, score in enumerate(sims)
             if score >= SIMILARITY_THRESHOLD
         ]
-    
+
         if not assigned_themes:
             assigned_themes = ["Others"]
-    
-        article_theme_map.append(assigned_themes)
-    
-        # Update topicality (volume) and track mentions
+
         for theme in assigned_themes:
             theme_metrics[theme]["volume"] += 1
             theme_metrics[theme]["articles"].add(i)
-    
-    # ---- Calculate centrality (theme overlap logic) ----
-    for theme in THEMES:  # Skip "Others"
+
+    # ---- Calculate centrality (overlap of articles across themes) ----
+    for theme in THEMES:  # exclude Others from centrality computation
         overlaps = 0
         theme_articles = theme_metrics[theme]["articles"]
-        
+
         for other_theme in THEMES:
             if other_theme != theme:
                 other_articles = theme_metrics[other_theme]["articles"]
                 overlaps += len(theme_articles.intersection(other_articles))
-        
+
         theme_metrics[theme]["centrality_raw"] = overlaps
-    
-    # Normalize centrality (0–1 scale)
-    max_overlap = max([theme_metrics[t]["centrality_raw"] for t in THEMES]) or 1
-    for theme in THEMES:
-        theme_metrics[theme]["centrality"] = theme_metrics[theme]["centrality_raw"] / max_overlap
-    
-    # Clear helper fields
-    for t in theme_metrics:
+
+    # Normalize centrality 0–1
+    max_overlap = max(
+        [theme_metrics[t].get("centrality_raw", 0) for t in THEMES]
+    ) or 1
+    for t in THEMES:
+        theme_metrics[t]["centrality"] = theme_metrics[t]["centrality_raw"] / max_overlap
+
+    # Others centrality = 0 by design
+    theme_metrics["Others"]["centrality"] = 0.0
+
+    # Cleanup helper fields
+    for t in list(theme_metrics.keys()):
         theme_metrics[t].pop("articles", None)
         theme_metrics[t].pop("centrality_raw", None)
 
-    print(f"📊 Theme metrics (volume only): {theme_metrics}")
+    print(f"📊 Theme metrics:", theme_metrics)
     print("\n=== DEBUG: Topic Distribution ===\n", Counter(topics))
 
     return docs, summaries, topic_model, topic_embeddings, theme_metrics
+
 
 # --------------------------------------------
 # Local debug
@@ -338,9 +360,3 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
-
-
-
-
-
-
