@@ -145,52 +145,45 @@ def fetch_articles():
 # --------------------------------------------
 # GPT topic summarizer
 # --------------------------------------------
-def gpt_summarize_topic(topic_id, docs_for_topic):
-    MAX_ARTICLES = 10
-    num_docs_for_summary = max(1, min(MAX_ARTICLES, len(docs_for_topic), len(docs_for_topic) // 10 or 1))
-    docs_selected = docs_for_topic[:num_docs_for_summary]
-
-    text = "\n\n".join([f"ARTICLE {i+1}:\n{doc}" for i, doc in enumerate(docs_selected)])
-
-    prompt = f"""
-You are preparing a factual briefing. Summarize the topic strictly based on the information provided.
-Use neutral, objective tone. Do not infer impact, sentiment, predictions, or subjective statements.
-
-STRICT FORMAT ONLY:
-
-TITLE: <3–5 WORDS, UPPERCASE>
-
-KEY POINTS:
-- Write ONE factual bullet per article maximum.
-- Each bullet must correspond to a separate article.
-- NO merging ideas across articles.
-
-{text}
-"""
-
-    try:
-        resp = client.chat.completions.create(
+def gpt_summarize_topic(topic_id, docs_for_topic):  # ← Base level (0)
+    """                                             # ← 4 spaces
+    Improved topic summarization...
+    """
+    
+    MAX_SUMMARY_DOCS = 8                            # ← 4 spaces
+    docs_selected = docs_for_topic[:MAX_SUMMARY_DOCS]
+    
+    text = "\n\n".join([...])                      # ← 4 spaces
+    
+    prompt = f"""                                   # ← 4 spaces
+    ...
+    """
+    
+    try:                                            # ← 4 spaces
+        resp = client.chat.completions.create(      # ← 8 spaces (try block)
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
         )
-        out = resp.choices[0].message.content or ""
-        if "TITLE:" in out:
-            parts = out.split("TITLE:", 1)[1].split("\n", 1)
+        out = resp.choices[0].message.content or "" # ← 8 spaces
+        
+        if "TITLE:" in out:                         # ← 8 spaces
+            parts = out.split("TITLE:", 1)[1]...    # ← 12 spaces (if block)
             title = parts[0].strip()
-            summary_lines = [
-                f"• {line.strip('-• ').strip()}"
-                for line in parts[1].strip().split("\n")
-                if line.strip()
-            ]
-            summary_formatted = "<br>".join(summary_lines)
-        else:
-            title = f"TOPIC {topic_id}"
-            summary_formatted = "Summary format incorrect."
-        return {"title": title, "summary": summary_formatted}
-
-    except Exception as e:
-        print(f"⚠ GPT error on topic {topic_id}: {e}")
-        return {"title": f"TOPIC {topic_id}", "summary": "Summary generation failed."}
+            summary_text = parts[1].strip()
+            
+            summary_formatted = summary_text...     # ← 12 spaces
+        else:                                       # ← 8 spaces
+            title = f"TOPIC {topic_id}"             # ← 12 spaces (else block)
+            summary_formatted = "Summary format..."
+            
+        return {"title": title, "summary": ...}    # ← 8 spaces
+        
+    except Exception as e:                          # ← 4 spaces
+        print(f"⚠ GPT error on topic {topic_id}...") # ← 8 spaces (except block)
+        return {                                    # ← 8 spaces
+            "title": f"TOPIC {topic_id}",           # ← 12 spaces (dict content)
+            "summary": "Summary generation failed.",
+        }
 
 # --------------------------------------------
 # BERTopic model (fixed clusters)
@@ -329,5 +322,6 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
 
 
