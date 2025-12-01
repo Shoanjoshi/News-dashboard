@@ -4,6 +4,7 @@
 #  - BERTopic clustering + GPT summaries
 #  - Article embeddings with MiniLM
 #  - Embedding-based article→theme assignment (+Others)
+#  - Fallback segmentation when BERTopic collapses
 # ============================================
 
 import os
@@ -66,7 +67,7 @@ RSS_FEEDS = [
 ]
 
 # --------------------------------------------
-# Themes for embedding-based theme analysis
+# Theme definitions
 # --------------------------------------------
 THEMES = [
     "Recessionary pressures",
@@ -79,7 +80,6 @@ THEMES = [
     "Bank lending and credit risk",
 ]
 
-# similarity threshold for assigning an article to a named theme
 SIMILARITY_THRESHOLD = 0.15
 
 PROMPT = """You are preparing a factual briefing. Summarize the topic strictly based on the information provided.
@@ -91,30 +91,23 @@ TITLE: <3–5 WORDS, UPPERCASE, factual>
 SUMMARY: <2–3 concise factual sentences. No speculation.>"""
 
 
-# --------------------------------------------
-# Helper: L2-normalize embedding rows
-# --------------------------------------------
+# ========== Utilities ==========
+
 def _normalize_rows(mat: np.ndarray) -> np.ndarray:
     norms = np.linalg.norm(mat, axis=1, keepdims=True)
     norms[norms == 0] = 1.0
     return mat / norms
 
 
-# --------------------------------------------
-# 1️⃣ RSS article fetcher
-# --------------------------------------------
+# ========== Fetch RSS Articles ==========
+
 def fetch_articles():
     docs = []
     for feed in RSS_FEEDS:
         try:
             parsed = feedparser.parse(feed)
             for entry in parsed.entries[:20]:
-                content = (
-                    entry.get("summary")
-                    or entry.get("description")
-                    or entry.get("title")
-                    or ""
-                )
+                content = entry.get("summary") or entry.get("description") or entry.get("title") or ""
                 if isinstance(content, str):
                     clean = content.strip()
                     if len(clean) > 50:
@@ -128,20 +121,13 @@ def fetch_articles():
     return docs
 
 
-# --------------------------------------------
-# 2️⃣ GPT topic summarizer
-# --------------------------------------------
+# ========== GPT Topic Summarization ==========
+
 def gpt_summarize_topic(topic_id, docs_for_topic):
-    """
-    Summarize a topic using the top 10 documents or top 10% of documents
-    (whichever is smaller), with bullet-style separation per article.
-    Prevents merging ideas from different sources.
-    """
     MAX_ARTICLES = 10
     num_docs_for_summary = max(1, min(MAX_ARTICLES, len(docs_for_topic), len(docs_for_topic) // 10 or 1))
     docs_selected = docs_for_topic[:num_docs_for_summary]
 
-    # Separate docs clearly for summarization
     text = "\n\n".join([f"ARTICLE {i+1}:\n{doc}" for i, doc in enumerate(docs_selected)])
 
     prompt = f"""
@@ -170,19 +156,14 @@ Now summarize the following articles:
         )
         out = resp.choices[0].message.content or ""
 
-        # If output follows strict format:
         if "TITLE:" in out:
             parts = out.split("TITLE:", 1)[1].split("\n", 1)
             title = parts[0].strip()
             summary_text = parts[1].strip()
-
-            # Convert bullets to HTML-safe format for dashboard
-            summary_lines = [
+            summary_formatted = "<br>".join([
                 f"• {line.strip('-• ').strip()}"
-                for line in summary_text.split("\n")
-                if line.strip()
-            ]
-            summary_formatted = "<br>".join(summary_lines)
+                for line in summary_text.split("\n") if line.strip()
+            ])
         else:
             title = f"TOPIC {topic_id}"
             summary_formatted = "Summary format incorrect."
@@ -191,15 +172,11 @@ Now summarize the following articles:
 
     except Exception as e:
         print(f"⚠ GPT error on topic {topic_id}: {e}")
-        return {
-            "title": f"TOPIC {topic_id}",
-            "summary": "Summary generation failed.",
-        }
+        return {"title": f"TOPIC {topic_id}", "summary": "Summary generation failed."}
 
 
-# --------------------------------------------
-# 3️⃣ BERTopic model runner
-# --------------------------------------------
+# ========== Topic Model ==========
+
 def run_bertopic_analysis(docs):
     umap_model = UMAP(
         n_neighbors=30,
@@ -234,54 +211,73 @@ def run_bertopic_analysis(docs):
     return topic_model, topics, probs
 
 
-# --------------------------------------------
-# 4️⃣ Main entry point used by generate_dashboard.py
-# --------------------------------------------
+# ========== Main ==========
+
 def generate_topic_results():
     docs = fetch_articles()
     if not docs:
         return [], {}, None, {}, {}
 
-    # BERTopic clustering
     topic_model, topics, probs = run_bertopic_analysis(docs)
     topic_info = topic_model.get_topic_info()
 
     summaries = {}
     topic_embeddings = {}
 
-    # If everything is noise, we will still return empty topics
     valid_topic_ids = [t for t in topic_info.Topic if t != -1]
 
+    # ----- Fallback segmentation -----
+    MIN_TOPIC_THRESHOLD = 5
+    if len(valid_topic_ids) < MIN_TOPIC_THRESHOLD:
+        print(f"⚠️ Only {len(valid_topic_ids)} topics detected — activating fallback segmentation.")
+
+        num_fallback_topics = MIN_TOPIC_THRESHOLD
+        docs_per_cluster = max(1, len(docs) // num_fallback_topics)
+
+        try:
+            embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+        except Exception:
+            embedding_model = None
+
+        for fallback_id in range(num_fallback_topics):
+            start = fallback_id * docs_per_cluster
+            end = start + docs_per_cluster
+            topic_docs = docs[start:end]
+            if not topic_docs:
+                continue
+
+            summaries[fallback_id] = gpt_summarize_topic(fallback_id, topic_docs)
+
+            try:
+                if embedding_model:
+                    emb_slice = embedding_model.encode(topic_docs, show_progress_bar=False)
+                    emb_norm = _normalize_rows(np.array(emb_slice))
+                    topic_embeddings[fallback_id] = np.mean(emb_norm, axis=0).tolist()
+                else:
+                    topic_embeddings[fallback_id] = topic_model.topic_embeddings_[0].tolist()
+            except Exception:
+                topic_embeddings[fallback_id] = topic_model.topic_embeddings_[0].tolist()
+
+        theme_metrics = {theme: {"volume": 0, "centrality": 0.0} for theme in THEMES}
+        theme_metrics["Others"] = {"volume": len(docs), "centrality": 0.0}
+        return docs, summaries, topic_model, topic_embeddings, theme_metrics
+
+    # ----- Normal Topic Aggregation -----
     for topic_id in valid_topic_ids:
         doc_indices = [i for i, t in enumerate(topics) if t == topic_id]
         if not doc_indices:
             continue
         topic_docs = [docs[i] for i in doc_indices[:5]]
         summaries[topic_id] = gpt_summarize_topic(topic_id, topic_docs)
-
-        # Map topic id -> embedding vector (as list for JSON)
         topic_embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
 
-    # ------------------------------------------------
-    # 5️⃣ Article→theme assignment via SentenceTransformer embeddings
-    # ------------------------------------------------
+    # ----- Theme Mapping -----
     try:
         embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-
-        article_embeddings = embedding_model.encode(
-            docs, show_progress_bar=False
-        )
-        article_embeddings = _normalize_rows(np.array(article_embeddings))
-
-        theme_embeddings = embedding_model.encode(
-            THEMES, show_progress_bar=False
-        )
-        theme_embeddings = _normalize_rows(np.array(theme_embeddings))
-
-    except Exception as e:
-        print(f"⚠ Embedding-based theme assignment failed: {e}")
-        # Fallback: everything in Others
-        theme_metrics = {theme: {"volume": 0, "centrality": 0.0} for theme in THEMES}
+        article_embeddings = _normalize_rows(np.array(embedding_model.encode(docs, show_progress_bar=False)))
+        theme_embeddings = _normalize_rows(np.array(embedding_model.encode(THEMES, show_progress_bar=False)))
+    except Exception:
+        theme_metrics = {t: {"volume": 0, "centrality": 0.0} for t in THEMES}
         theme_metrics["Others"] = {"volume": len(docs), "centrality": 0.0}
         return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
@@ -291,49 +287,14 @@ def generate_topic_results():
     for emb in article_embeddings:
         sims = cosine_similarity([emb], theme_embeddings)[0]
         best_idx = int(np.argmax(sims))
-        best_score = float(sims[best_idx])
-        if best_score >= SIMILARITY_THRESHOLD:
-            assigned_theme = THEMES[best_idx]
-        else:
-            assigned_theme = "Others"
+        assigned_theme = THEMES[best_idx] if sims[best_idx] >= SIMILARITY_THRESHOLD else "Others"
         theme_metrics[assigned_theme]["volume"] += 1
 
-    print("📊 Theme metrics (volume only):", theme_metrics)
-
-    # summaries: dict keyed by topic_id
-    # topic_embeddings: dict keyed by topic_id
-    # theme_metrics: article-level theme volume (centrality=0.0; dashboard adds ranks/deltas)
-    
-    #TEMPORARY DIAGNOSTICS
-    from collections import Counter
-    print("\n=== DEBUG: BERTopic Topic Info ===")
-    print(topic_info)
-    
-    print("\n=== DEBUG: Topic Distribution ===")
-    print(Counter(topics))
-    
-    # Print small sample of clustered docs
-    sample_topic = next((t for t in topic_info.Topic if t != -1), None)
-    if sample_topic is not None:
-        doc_indices = [i for i, t in enumerate(topics) if t == sample_topic]
-        print(f"\n🧪 DEBUG: Sample Docs for Topic {sample_topic}\n")
-        for idx in doc_indices[:3]:
-            print(f"Doc {idx}:\n{docs[idx][:250]}\n")
-    else:
-        print("⚠ DEBUG: No non-noise topics detected.")
-      
     return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
 
-# --------------------------------------------
-# Local debug
-# --------------------------------------------
+# ----- Local Debug -----
 if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
-
-
-
-
-
