@@ -265,7 +265,7 @@ def generate_topic_results():
         theme_embeddings = embedding_model.encode(
             theme_texts, show_progress_bar=False
         )
-    theme_embeddings = _normalize_rows(np.array(theme_embeddings))
+        theme_embeddings = _normalize_rows(np.array(theme_embeddings))
     except Exception as e:
         print(f"⚠ Embedding-based theme assignment failed: {e}")
         theme_metrics = {t: {"volume": 0, "centrality": 0.0} for t in THEMES}
@@ -338,6 +338,7 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
 
 
 
