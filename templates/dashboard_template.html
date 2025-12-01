@@ -35,7 +35,7 @@
             color: #1e2a35;
         }
 
-        /* ===== Chart Containers (take all vertical space) ===== */
+        /* ===== Chart Containers (fill available vertical space) ===== */
         .chart-container {
             flex: 1;
             display: flex;
@@ -80,8 +80,9 @@
 
         /* ===== Column Widths ===== */
         .topic-col { width: 8%; text-align: center; font-weight: bold; }
-        .title-col { width: 24%; font-weight: 600; }
-        .summary-col { width: 68%; }
+        .count-col { width: 10%; text-align: center; font-weight: 600; }
+        .title-col { width: 22%; font-weight: 600; }
+        .summary-col { width: 60%; }
 
         /* ===== Legend Styling ===== */
         .legend {
@@ -91,6 +92,7 @@
         }
     </style>
 </head>
+
 <body>
 
     <!-- 🗺 1️⃣ TOP-LEFT: Topic Map -->
@@ -119,6 +121,7 @@
                 <thead>
                     <tr>
                         <th class="topic-col">ID</th>
+                        <th class="count-col">Articles</th>
                         <th class="title-col">Title</th>
                         <th class="summary-col">Summary</th>
                     </tr>
@@ -127,6 +130,15 @@
                     {% for item in summaries %}
                     <tr class="{% if item.is_new %}new-topic{% elif item.is_persistent %}persistent-topic{% endif %}">
                         <td class="topic-col">{{ item.topic_id }}</td>
+
+                        <td class="count-col">
+                            {% if item.article_count %}
+                                {{ item.article_count }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+
                         <td class="title-col">{{ item.title }}</td>
                         <td class="summary-col">{{ item.summary | safe }}</td>
                     </tr>
@@ -134,7 +146,10 @@
                 </tbody>
             </table>
         </div>
-        <p class="legend">🔶 <b>Yellow = New</b> &nbsp;|&nbsp; 🟢 <b>Green = Persistent</b></p>
+        <p class="legend">
+            🔶 <b>Yellow = New</b> &nbsp;|&nbsp;
+            🟢 <b>Green = Persistent</b>
+        </p>
     </div>
 
     <!-- 📈 4️⃣ BOTTOM-RIGHT: Theme Risk Signals -->
@@ -168,3 +183,4 @@
 
 </body>
 </html>
+
