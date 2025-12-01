@@ -86,27 +86,19 @@ RSS_FEEDS = [
 # --------------------------------------------
 # Themes (unchanged here)
 # --------------------------------------------
-THEMES = [
-    "Recessionary pressures",
-    "Inflation",
-    "Private credit",
-    "AI",
-    "Cyber attacks",
-    "Commercial real estate",
-    "Consumer debt",
-    "Bank lending and credit risk",
-]
+THEME_DESCRIPTIONS = {
+    "Recessionary pressures": "Economic slowdown, declining demand, unemployment risk, or business contraction.",
+    "Inflation": "Persistent price increases and monetary policy response impacting costs and purchasing power.",
+    "Private credit": "Non-bank lending, private debt fund activity, liquidity constraints, and leveraged finance risk.",
+    "AI": "Artificial intelligence development, enterprise adoption, automation, and regulatory concerns.",
+    "Cyber attacks": "Cybersecurity breaches, systemic risks related to data or technology vulnerabilities.",
+    "Commercial real estate": "Trends in office, retail, industrial, and hospitality real estate with refinancing risk.",
+    "Consumer debt": "Household financial pressure, debt levels, delinquencies, affordability shifts.",
+    "Bank lending and credit risk": "Credit exposure in banking portfolios, regulatory pressure, and default risks.",
+    "Others": "Articles not directly linked to financial systemic themes.",
+}
 
 SIMILARITY_THRESHOLD = 0.20
-
-PROMPT = """You are preparing a senior management briefing. Summarize the topic strictly based on the information provided.
-Provide context where helpful (using information provided only). Keep the language factual and tone neutral. Avoid subjective language, predictions, or assumptions.
-
-
-STRICT FORMAT ONLY:
-TITLE: <3–5 WORDS, UPPERCASE, factual>
-SUMMARY: <2–3 concise factual sentences. No speculation.>"""
-
 # --------------------------------------------
 # Helper normalization
 # --------------------------------------------
@@ -260,8 +252,20 @@ def generate_topic_results():
 
     try:
         embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-        article_embeddings = _normalize_rows(embedding_model.encode(docs, show_progress_bar=False))
-        theme_embeddings = _normalize_rows(embedding_model.encode(THEMES, show_progress_bar=False))
+        article_embeddings = embedding_model.encode(
+            docs, show_progress_bar=False
+        )
+        article_embeddings = _normalize_rows(np.array(article_embeddings))    
+        # 🆕 Concatenate theme name with description before embedding
+        theme_texts = [
+            f"{theme}. {THEME_DESCRIPTIONS.get(theme, '')}"
+            for theme in THEMES
+        ]
+        theme_texts.append("Others. General or unrelated articles not clearly tied to defined financial risk themes.")    
+        theme_embeddings = embedding_model.encode(
+            theme_texts, show_progress_bar=False
+        )
+    theme_embeddings = _normalize_rows(np.array(theme_embeddings))
     except Exception as e:
         print(f"⚠ Embedding-based theme assignment failed: {e}")
         theme_metrics = {t: {"volume": 0, "centrality": 0.0} for t in THEMES}
@@ -334,6 +338,7 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
 
 
 
