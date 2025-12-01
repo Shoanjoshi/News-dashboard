@@ -145,43 +145,55 @@ def fetch_articles():
 # --------------------------------------------
 # GPT topic summarizer
 # --------------------------------------------
-def gpt_summarize_topic(topic_id, docs_for_topic):  # ← Base level (0)
-    """                                             # ← 4 spaces
-    Improved topic summarization...
+def gpt_summarize_topic(topic_id, docs_for_topic):
     """
-    
-    MAX_SUMMARY_DOCS = 8                            # ← 4 spaces
+    Improved topic summarization using representative docs with holistic summary.
+    Ensures summaries match topic map keywords and removes bullet formatting.
+    """
+
+    MAX_SUMMARY_DOCS = 8  # use more docs for better representation
     docs_selected = docs_for_topic[:MAX_SUMMARY_DOCS]
-    
-    text = "\n\n".join([...])                      # ← 4 spaces
-    
-    prompt = f"""                                   # ← 4 spaces
-    ...
-    """
-    
-    try:                                            # ← 4 spaces
-        resp = client.chat.completions.create(      # ← 8 spaces (try block)
+
+    # Clear separation between documents
+    text = "\n\n".join([f"ARTICLE:\n{doc}" for doc in docs_selected])
+
+    prompt = f"""
+You are preparing an objective briefing based ONLY on the content provided.
+Summarize the central theme of the topic without referencing individual articles.
+Avoid subjective tone, speculation, or predictions. Stick to facts.
+
+STRICT FORMAT:
+
+TITLE: <3–5 WORDS, UPPERCASE, factual>
+SUMMARY: <2–4 concise sentences that capture the main theme. No bullet points. No article separation.>
+
+Content to analyze:
+{text}
+"""
+
+    try:
+        resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
         )
-        out = resp.choices[0].message.content or "" # ← 8 spaces
-        
-        if "TITLE:" in out:                         # ← 8 spaces
-            parts = out.split("TITLE:", 1)[1]...    # ← 12 spaces (if block)
+        out = resp.choices[0].message.content or ""
+
+        if "TITLE:" in out:
+            parts = out.split("TITLE:", 1)[1].split("SUMMARY:", 1)
             title = parts[0].strip()
             summary_text = parts[1].strip()
-            
-            summary_formatted = summary_text...     # ← 12 spaces
-        else:                                       # ← 8 spaces
-            title = f"TOPIC {topic_id}"             # ← 12 spaces (else block)
-            summary_formatted = "Summary format..."
-            
-        return {"title": title, "summary": ...}    # ← 8 spaces
-        
-    except Exception as e:                          # ← 4 spaces
-        print(f"⚠ GPT error on topic {topic_id}...") # ← 8 spaces (except block)
-        return {                                    # ← 8 spaces
-            "title": f"TOPIC {topic_id}",           # ← 12 spaces (dict content)
+
+            summary_formatted = summary_text.replace("\n", " ")  # single paragraph
+        else:
+            title = f"TOPIC {topic_id}"
+            summary_formatted = "Summary format incorrect."
+
+        return {"title": title, "summary": summary_formatted}
+
+    except Exception as e:
+        print(f"⚠ GPT error on topic {topic_id}: {e}")
+        return {
+            "title": f"TOPIC {topic_id}",
             "summary": "Summary generation failed.",
         }
 
@@ -322,6 +334,7 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
 
 
 
