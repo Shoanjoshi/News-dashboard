@@ -169,7 +169,7 @@ def gpt_summarize_topic(topic_id, docs_for_topic):
     prompt = f"""
 You are preparing an objective briefing based ONLY on the content provided.
 Summarize the central theme of the topic without referencing individual articles.
-Avoid subjective tone, speculation, or predictions. Stick to facts.
+Avoid subjective tone, speculation, or predictions or drawing implications. Stick to facts.
 
 STRICT FORMAT:
 
@@ -360,3 +360,4 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
