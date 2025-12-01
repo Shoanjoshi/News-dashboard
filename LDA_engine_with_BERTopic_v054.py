@@ -260,14 +260,30 @@ def generate_topic_results():
     if len(valid_topic_ids) < 5:
         print(f"⚠ Only {len(valid_topic_ids)} topics detected — but continuing with KMeans output.")
 
+    #for topic_id in valid_topic_ids:
+    #    doc_indices = [i for i, t in enumerate(topics) if t == topic_id]
+    #   if not doc_indices:
+    #        continue
+    #    topic_docs = [docs[i] for i in doc_indices[:5]]
+    #    summaries[topic_id] = gpt_summarize_topic(topic_id, topic_docs)
+    #    topic_embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
+
     for topic_id in valid_topic_ids:
+        # Use BERTopic's topic assignment as before
         doc_indices = [i for i, t in enumerate(topics) if t == topic_id]
         if not doc_indices:
             continue
+
+        # Keep your existing behavior: first 5 docs for summarization
         topic_docs = [docs[i] for i in doc_indices[:5]]
         summaries[topic_id] = gpt_summarize_topic(topic_id, topic_docs)
-        topic_embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
 
+        # NEW: attach article count for summary table
+        summaries[topic_id]["article_count"] = len(doc_indices)
+
+        # Existing: store embedding
+        topic_embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
+    
     # ------------------------------------------------
     # Article→theme assignment via SentenceTransformer embeddings
     # ------------------------------------------------
@@ -360,4 +376,5 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
 
