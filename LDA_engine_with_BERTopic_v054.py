@@ -99,9 +99,9 @@ THEMES = [
 
 SIMILARITY_THRESHOLD = 0.20
 
-PROMPT = """You are preparing a factual briefing. Summarize the topic strictly based on the information provided.
-Do not infer impact, sentiment, or implications. Avoid subjective language, predictions, or assumptions.
-Use neutral, objective tone.
+PROMPT = """You are preparing a senior management briefing. Summarize the topic strictly based on the information provided.
+Provide context where helpful (using information provided only). Keep the language factual and tone neutral. Avoid subjective language, predictions, or assumptions.
+
 
 STRICT FORMAT ONLY:
 TITLE: <3–5 WORDS, UPPERCASE, factual>
@@ -329,4 +329,5 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
 
