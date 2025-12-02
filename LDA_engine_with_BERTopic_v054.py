@@ -1,4 +1,3 @@
-
 # ============================================
 # LDA_engine_with_BERTopic_v054.py
 # Stable engine with:
@@ -6,13 +5,12 @@
 #  - GPT summaries with holistic topic summaries
 #  - Expanded RSS feeds (NYT, WaPo, Cybersecurity sources)
 #  - Multi-theme assignment for topicality & centrality
-#  - Topic–Theme matrix for heatmap (OPTION A)
 # ============================================
 
 import os
 import feedparser
 import numpy as np
-from collections import Counter, defaultdict
+from collections import Counter
 
 from openai import OpenAI
 from bertopic import BERTopic
@@ -164,14 +162,13 @@ def gpt_summarize_topic(topic_id, docs_for_topic):
     prompt = f"""
 You are preparing an objective briefing based ONLY on the content provided.
 Summarize the central theme of the topic without referencing individual articles.
-Avoid subjective tone, speculation, or predictions or drawing implications. Stick to facts.
+Avoid speculation or subjective tone.
 
 STRICT FORMAT:
-
 TITLE: <3–5 WORDS, UPPERCASE, factual>
-SUMMARY: <2–4 concise sentences capturing the main theme. No bullet points.>
+SUMMARY: <2–4 concise sentences capturing the main theme.>
 
-Content to analyze:
+Content:
 {text}
 """
 
@@ -185,10 +182,12 @@ Content to analyze:
         if "TITLE:" in out and "SUMMARY:" in out:
             parts = out.split("TITLE:", 1)[1].split("SUMMARY:", 1)
             title = parts[0].strip()
-            summary_text = parts[1].strip()
-            return {"title": title, "summary": summary_text.replace("\n", " ")}
+            summary_text = parts[1].strip().replace("\n", " ")
         else:
-            return {"title": f"TOPIC {topic_id}", "summary": "Summary format error."}
+            title = f"TOPIC {topic_id}"
+            summary_text = "Summary format incorrect."
+
+        return {"title": title, "summary": summary_text}
 
     except Exception as e:
         print(f"⚠ GPT error on topic {topic_id}: {e}")
@@ -196,7 +195,7 @@ Content to analyze:
 
 
 # --------------------------------------------
-# BERTopic model
+# BERTopic model (fixed clusters)
 # --------------------------------------------
 def run_bertopic_analysis(docs):
     umap_model = UMAP(
@@ -238,96 +237,81 @@ def run_bertopic_analysis(docs):
 def generate_topic_results():
     docs = fetch_articles()
     if not docs:
-        return [], {}, None, {}, {}, {}
+        return [], {}, None, {}, {}
 
     topic_model, topics, probs = run_bertopic_analysis(docs)
     topic_info = topic_model.get_topic_info()
+
     valid_topic_ids = [t for t in topic_info.Topic if t != -1]
+    summaries, topic_embeddings = {}, {}
 
-    summaries = {}
-    topic_embeddings = {}
-    topic_article_indices = {}
-
-    # NEW: Topic→Theme matrix
-    topic_theme_matrix = {
-        topic_id: {theme: 0 for theme in THEMES + ["Others"]}
-        for topic_id in valid_topic_ids
-    }
-
-    # -------------------------
-    # Topic summaries + article counts
-    # -------------------------
     for topic_id in valid_topic_ids:
-        indices = [i for i, t in enumerate(topics) if t == topic_id]
-        topic_article_indices[topic_id] = indices
-
-        if not indices:
+        doc_indices = [i for i, t in enumerate(topics) if t == topic_id]
+        if not doc_indices:
             continue
 
-        topic_docs = [docs[i] for i in indices[:5]]
+        topic_docs = [docs[i] for i in doc_indices[:5]]
         summaries[topic_id] = gpt_summarize_topic(topic_id, topic_docs)
-        summaries[topic_id]["article_count"] = len(indices)
+        summaries[topic_id]["article_count"] = len(doc_indices)
 
         topic_embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
 
-    # -------------------------
-    # Theme embedding assignment
-    # -------------------------
+    # ------------------------------------------------
+    # Theme assignment
+    # ------------------------------------------------
     try:
         embedding_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
 
-        article_emb = embedding_model.encode(docs, show_progress_bar=False)
-        article_emb = _normalize_rows(np.array(article_emb))
+        article_embeddings = embedding_model.encode(docs, show_progress_bar=False)
+        article_embeddings = _normalize_rows(np.array(article_embeddings))
 
-        theme_texts = [f"{t}. {THEME_DESCRIPTIONS[t]}" for t in THEMES]
-        theme_emb = embedding_model.encode(theme_texts, show_progress_bar=False)
-        theme_emb = _normalize_rows(np.array(theme_emb))
+        theme_texts = [
+            f"{theme}. {THEME_DESCRIPTIONS.get(theme, '')}"
+            for theme in THEMES
+        ]
+        theme_embeddings = embedding_model.encode(theme_texts, show_progress_bar=False)
+        theme_embeddings = _normalize_rows(np.array(theme_embeddings))
 
     except Exception as e:
-        print("⚠ Theme embedding failure:", e)
+        print(f"⚠ Embedding-based theme assignment failed: {e}")
         theme_metrics = {t: {"volume": 0, "centrality": 0.0} for t in THEMES}
         theme_metrics["Others"] = {"volume": len(docs), "centrality": 0.0}
-        return docs, summaries, topic_model, topic_embeddings, theme_metrics, topic_theme_matrix
+        return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
-    # -------------------------
-    # Theme assignment per article
-    # -------------------------
     theme_metrics = {
         t: {"volume": 0, "centrality": 0.0, "articles": set()}
         for t in THEMES
     }
     theme_metrics["Others"] = {"volume": 0, "centrality": 0.0, "articles": set()}
 
-    for i, emb in enumerate(article_emb):
-        sims = cosine_similarity([emb], theme_emb)[0]
-        assigned = [THEMES[idx] for idx, s in enumerate(sims) if s >= SIMILARITY_THRESHOLD]
-        if not assigned:
-            assigned = ["Others"]
+    # Assign themes to articles
+    for i, emb in enumerate(article_embeddings):
+        sims = cosine_similarity([emb], theme_embeddings)[0]
 
-        # volume + article tracking
-        for th in assigned:
-            theme_metrics[th]["volume"] += 1
-            theme_metrics[th]["articles"].add(i)
+        assigned_themes = [
+            THEMES[idx] for idx, score in enumerate(sims)
+            if score >= SIMILARITY_THRESHOLD
+        ]
 
-        # NEW: also add to topic_theme_matrix
-        topic_id = topics[i]
-        if topic_id in topic_theme_matrix:
-            for th in assigned:
-                topic_theme_matrix[topic_id][th] += 1
+        if not assigned_themes:
+            assigned_themes = ["Others"]
 
-    # -------------------------
-    # Centrality computation
-    # -------------------------
-    for t in THEMES:
+        for theme in assigned_themes:
+            theme_metrics[theme]["volume"] += 1
+            theme_metrics[theme]["articles"].add(i)
+
+    # ---- Calculate centrality ----
+    for theme in THEMES:
         overlaps = 0
-        A = theme_metrics[t]["articles"]
-        for other in THEMES:
-            if other != t:
-                B = theme_metrics[other]["articles"]
-                overlaps += len(A.intersection(B))
-        theme_metrics[t]["centrality_raw"] = overlaps
+        theme_articles = theme_metrics[theme]["articles"]
 
-    max_overlap = max(theme_metrics[t]["centrality_raw"] for t in THEMES) or 1
+        for other_theme in THEMES:
+            if other_theme != theme:
+                overlaps += len(theme_articles.intersection(theme_metrics[other_theme]["articles"]))
+
+        theme_metrics[theme]["centrality_raw"] = overlaps
+
+    max_overlap = max([theme_metrics[t].get("centrality_raw", 0) for t in THEMES]) or 1
     for t in THEMES:
         theme_metrics[t]["centrality"] = theme_metrics[t]["centrality_raw"] / max_overlap
 
@@ -337,32 +321,42 @@ def generate_topic_results():
         theme_metrics[t].pop("articles", None)
         theme_metrics[t].pop("centrality_raw", None)
 
-    # -------------------------
-    # Sort topics by volume (descending)
-    # -------------------------
-    topic_volume_sorted = sorted(
-        valid_topic_ids,
-        key=lambda tid: len(topic_article_indices.get(tid, [])),
-        reverse=True,
-    )
+    # --------------------------------------------
+    # Topic–Theme Matrix (debug only)
+    # --------------------------------------------
+    topic_theme_matrix = {
+        topic_id: {
+            theme: 0 for theme in list(THEMES) + ["Others"]
+        }
+        for topic_id in valid_topic_ids
+    }
 
-    print("\n=== DEBUG: Topic–Theme Matrix Ready ===")
+    for topic_id in valid_topic_ids:
+        doc_indices = [i for i, t in enumerate(topics) if t == topic_id]
+
+        for i in doc_indices:
+            sims = cosine_similarity([article_embeddings[i]], theme_embeddings)[0]
+            assigned = [THEMES[idx] for idx, s in enumerate(sims) if s >= SIMILARITY_THRESHOLD]
+            if not assigned:
+                assigned = ["Others"]
+            for theme in assigned:
+                topic_theme_matrix[topic_id][theme] += 1
+
+    print("\n=== DEBUG: Topic–Theme Matrix Ready ===\n")
     print(topic_theme_matrix)
 
-    return (
-        docs,
-        summaries,
-        topic_model,
-        topic_embeddings,
-        theme_metrics,
-        topic_theme_matrix,     # NEW
-        topic_volume_sorted     # NEW
-    )
+    print(f"\n📊 Theme metrics:", theme_metrics)
+    print("\n=== DEBUG: Topic Distribution\n", Counter(topics))
+
+    # IMPORTANT: return EXACTLY 5 values
+    return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
 
 # --------------------------------------------
 # Local debug
 # --------------------------------------------
 if __name__ == "__main__":
-    out = generate_topic_results()
-    print("Output lengths:", [len(x) if hasattr(x, '__len__') else x for x in out])
+    d, s, m, e, tm = generate_topic_results()
+    print(f"Docs: {len(d)}, topics: {len(s)}")
+    print("Themes:", tm)
+
