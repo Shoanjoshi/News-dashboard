@@ -35,12 +35,11 @@
             color: #1e2a35;
         }
 
-        /* ===== Chart Containers (fill available vertical space) ===== */
+        /* ===== Chart Containers ===== */
         .chart-container {
             flex: 1;
             display: flex;
         }
-
         .chart-container > div {
             flex: 1;
         }
@@ -59,14 +58,12 @@
             border-collapse: collapse;
             table-layout: fixed;
         }
-
         th, td {
             border: 1px solid #ccc;
             padding: 10px;
             font-size: 14px;
             vertical-align: top;
         }
-
         th {
             background-color: #f2f3f5;
             font-size: 15px;
@@ -101,58 +98,7 @@
         <div class="chart-container">{{ topic_map | safe }}</div>
     </div>
 
-    <!-- 🎯 2️⃣ TOP-RIGHT: Theme Distance Map -->
-    <div class="panel">
-        <h2>🎯 Theme Distance Map</h2>
-        <div class="chart-container">
-            {% if theme_map %}
-                {{ theme_map | safe }}
-            {% else %}
-                <p>No theme visualization available.</p>
-            {% endif %}
-        </div>
-    </div>
-
-    <!-- 📝 3️⃣ BOTTOM-LEFT: Topic Summaries -->
-    <div class="panel">
-        <h2>📝 Topic Summaries – {{ run_date }}</h2>
-        <div class="scrollable">
-            <table>
-                <thead>
-                    <tr>
-                        <th class="topic-col">ID</th>
-                        <th class="count-col">Articles</th>
-                        <th class="title-col">Title</th>
-                        <th class="summary-col">Summary</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in summaries %}
-                    <tr class="{% if item.is_new %}new-topic{% elif item.is_persistent %}persistent-topic{% endif %}">
-                        <td class="topic-col">{{ item.topic_id }}</td>
-
-                        <td class="count-col">
-                            {% if item.article_count %}
-                                {{ item.article_count }}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-
-                        <td class="title-col">{{ item.title }}</td>
-                        <td class="summary-col">{{ item.summary | safe }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-        <p class="legend">
-            🔶 <b>Yellow = New</b> &nbsp;|&nbsp;
-            🟢 <b>Green = Persistent</b>
-        </p>
-    </div>
-
-    <!-- 📈 4️⃣ BOTTOM-RIGHT: Theme Risk Signals -->
+    <!-- 📈 2️⃣ TOP-RIGHT: Theme Risk Signals (MOVED UP) -->
     <div class="panel">
         <h2>📈 Theme Risk Signals</h2>
         <div class="scrollable">
@@ -178,6 +124,52 @@
                     {% endfor %}
                 </tbody>
             </table>
+        </div>
+
+        <!-- Theme Map stays inside the same panel under the table -->
+        <h2 style="margin-top:16px;">🎯 Theme Distance Map</h2>
+        <div class="chart-container">
+            {{ theme_map | safe }}
+        </div>
+    </div>
+
+    <!-- 📝 3️⃣ BOTTOM-LEFT: Topic Summaries -->
+    <div class="panel">
+        <h2>📝 Topic Summaries – {{ run_date }}</h2>
+        <div class="scrollable">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="topic-col">ID</th>
+                        <th class="count-col">Articles</th>
+                        <th class="title-col">Title</th>
+                        <th class="summary-col">Summary</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in summaries %}
+                    <tr class="{% if item.is_new %}new-topic{% elif item.is_persistent %}persistent-topic{% endif %}">
+                        <td class="topic-col">{{ item.topic_id }}</td>
+                        <td class="count-col">{{ item.article_count or "-" }}</td>
+                        <td class="title-col">{{ item.title }}</td>
+                        <td class="summary-col">{{ item.summary | safe }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <p class="legend">
+            🔶 <b>Yellow = New</b> &nbsp;|&nbsp;
+            🟢 <b>Green = Persistent</b>
+        </p>
+    </div>
+
+    <!-- 🔥 4️⃣ BOTTOM-RIGHT: Topic–Theme Heatmap (NEW PANEL) -->
+    <div class="panel">
+        <h2>🔥 Topic–Theme Heatmap</h2>
+        <div class="chart-container">
+            {{ topic_theme_heatmap | safe }}
         </div>
     </div>
 
