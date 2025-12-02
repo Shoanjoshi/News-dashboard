@@ -175,7 +175,12 @@ def generate_dashboard():
     # 4️⃣ Topicality = Δ volume vs prior day (keep as requested)
     for theme, m in theme_metrics.items():
         prev_volume = prev_data.get(theme, {}).get("volume", 0)
-        m["topicality"] = m["volume"] - prev_volume
+        #m["topicality"] = m["volume"] - prev_volume
+        if prev_volume > 0:
+            m["topicality"] = (m["volume"] - prev_volume) / prev_volume
+        else:
+            # If no prior data, treat as 0% rather than infinite
+            m["topicality"] = 0.0
 
     # 5️⃣ Rank ordering
     for metric in ["centrality", "topicality"]:
@@ -191,7 +196,12 @@ def generate_dashboard():
             "centrality_rank": m.get("centrality_rank"),
             "topicality_rank": m.get("topicality_rank"),
             "volume": m.get("volume", 0),
-            "prev_centrality": prev_data.get(theme, {}).get("centrality"),
+            #"prev_centrality": prev_data.get(theme, {}).get("centrality"),
+            "prev_centrality": (
+                round(prev_data.get(theme, {}).get("centrality"), 3)
+                if prev_data.get(theme, {}).get("centrality") is not None
+                else None
+            ),
             "prev_topicality": prev_data.get(theme, {}).get("topicality"),
             "prev_centrality_rank": prev_data.get(theme, {}).get("centrality_rank"),
             "prev_topicality_rank": prev_data.get(theme, {}).get("topicality_rank"),
