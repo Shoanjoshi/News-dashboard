@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <title>Daily News Dashboard - {{ run_date }}</title>
+
     <style>
         /* ===== Global Layout ===== */
         body {
@@ -16,12 +17,12 @@
             background-color: #fafafa;
         }
 
-        /* ===== Dashboard Panels ===== */
+        /* ===== Panels ===== */
         .panel {
             border: 1px solid #ddd;
             border-radius: 8px;
             padding: 18px;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
             background: white;
             display: flex;
             flex-direction: column;
@@ -35,13 +36,18 @@
             color: #1e2a35;
         }
 
-        /* ===== Chart Containers ===== */
-        .chart-container {
-            flex: 1;
+        /* ===== Side-by-side layout for theme section ===== */
+        .side-by-side {
             display: flex;
-        }
-        .chart-container > div {
+            flex-direction: row;
+            gap: 12px;
             flex: 1;
+            overflow: hidden;
+        }
+
+        .half {
+            flex: 1;
+            overflow-y: auto;
         }
 
         /* ===== Scrollable Sections ===== */
@@ -52,7 +58,7 @@
             padding-top: 5px;
         }
 
-        /* ===== Table Styling ===== */
+        /* ===== Tables ===== */
         table {
             width: 100%;
             border-collapse: collapse;
@@ -81,12 +87,6 @@
         .title-col { width: 22%; font-weight: 600; }
         .summary-col { width: 60%; }
 
-        /* ===== Legend Styling ===== */
-        .legend {
-            font-size: 13px;
-            margin-top: 6px;
-            color: #666;
-        }
     </style>
 </head>
 
@@ -95,41 +95,50 @@
     <!-- 🗺 1️⃣ TOP-LEFT: Topic Map -->
     <div class="panel">
         <h2>🗺 Topic Map</h2>
-        <div class="chart-container">{{ topic_map | safe }}</div>
+        <div class="scrollable">{{ topic_map | safe }}</div>
     </div>
 
-    <!-- 📈 2️⃣ TOP-RIGHT: Theme Risk Signals (MOVED UP) -->
+    <!-- 🎯 2️⃣ TOP-RIGHT: Theme Scatter + Theme Table (side-by-side) -->
     <div class="panel">
-        <h2>📈 Theme Risk Signals</h2>
-        <div class="scrollable">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Theme</th>
-                        <th>Centrality<br>(Rank)</th>
-                        <th>Topicality<br>(Rank)</th>
-                        <th>Prior Centrality</th>
-                        <th>Prior Topicality</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for theme, data in theme_signals.items() %}
-                    <tr>
-                        <td>{{ theme }}</td>
-                        <td>{{ data.centrality_rank }} ({{ data.centrality }})</td>
-                        <td>{{ data.topicality_rank }} ({{ data.topicality }})</td>
-                        <td>{{ data.prev_centrality_rank }} ({{ data.prev_centrality }})</td>
-                        <td>{{ data.prev_topicality_rank }} ({{ data.prev_topicality }})</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <h2>🎯 Theme Signals & Distance Map</h2>
 
-        <!-- Theme Map stays inside the same panel under the table -->
-        <h2 style="margin-top:16px;">🎯 Theme Distance Map</h2>
-        <div class="chart-container">
-            {{ theme_map | safe }}
+        <div class="side-by-side">
+
+            <!-- Left: Theme Scatter Plot -->
+            <div class="half">
+                {% if theme_map %}
+                    {{ theme_map | safe }}
+                {% else %}
+                    <p>No theme visualization available.</p>
+                {% endif %}
+            </div>
+
+            <!-- Right: Theme Table -->
+            <div class="half scrollable">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Theme</th>
+                            <th>Centrality<br>(Rank)</th>
+                            <th>Topicality<br>(Rank)</th>
+                            <th>Prior<br>Centrality</th>
+                            <th>Prior<br>Topicality</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for theme, data in theme_signals.items() %}
+                        <tr>
+                            <td>{{ theme }}</td>
+                            <td>{{ data.centrality_rank }} ({{ data.centrality }})</td>
+                            <td>{{ data.topicality_rank }} ({{ data.topicality }})</td>
+                            <td>{{ data.prev_centrality_rank }} ({{ data.prev_centrality }})</td>
+                            <td>{{ data.prev_topicality_rank }} ({{ data.prev_topicality }})</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
         </div>
     </div>
 
@@ -150,7 +159,7 @@
                     {% for item in summaries %}
                     <tr class="{% if item.is_new %}new-topic{% elif item.is_persistent %}persistent-topic{% endif %}">
                         <td class="topic-col">{{ item.topic_id }}</td>
-                        <td class="count-col">{{ item.article_count or "-" }}</td>
+                        <td class="count-col">{{ item.article_count }}</td>
                         <td class="title-col">{{ item.title }}</td>
                         <td class="summary-col">{{ item.summary | safe }}</td>
                     </tr>
@@ -158,18 +167,13 @@
                 </tbody>
             </table>
         </div>
-
-        <p class="legend">
-            🔶 <b>Yellow = New</b> &nbsp;|&nbsp;
-            🟢 <b>Green = Persistent</b>
-        </p>
     </div>
 
-    <!-- 🔥 4️⃣ BOTTOM-RIGHT: Topic–Theme Heatmap (NEW PANEL) -->
+    <!-- 🔥 4️⃣ BOTTOM-RIGHT: Topic × Theme Heatmap -->
     <div class="panel">
-        <h2>🔥 Topic–Theme Heatmap</h2>
-        <div class="chart-container">
-            {{ topic_theme_heatmap | safe }}
+        <h2>🔥 Topic × Theme Heatmap</h2>
+        <div class="scrollable">
+            {{ heatmap | safe }}
         </div>
     </div>
 
