@@ -1,12 +1,13 @@
 # ============================================
 # 📄 generate_dashboard.py
-# Version 5.8 – Updated metrics, centrality, and article counts
+# Version 5.9 – Added Topic–Theme Heatmap & layout updates
 # ============================================
 
 import os
 import json
 from jinja2 import Environment, FileSystemLoader
 import plotly.graph_objects as go
+import numpy as np
 
 from LDA_engine_with_BERTopic_v054 import generate_topic_results
 
@@ -106,8 +107,8 @@ def _build_theme_map_html(theme_signals, total_docs):
         )
 
         fig.update_layout(
-            title=f"Theme Distance Map (Centrality vs Δ Volume) – {total_docs} articles",
-            xaxis_title="Topicality (Δ news volume vs prior day)",
+            title=f"Theme Distance Map (Centrality vs Δ Volume %) – {total_docs} articles",
+            xaxis_title="Topicality (% Δ volume vs prior day)",
             yaxis_title="Centrality",
             autosize=True,
         )
@@ -119,19 +120,59 @@ def _build_theme_map_html(theme_signals, total_docs):
         return "<p>No theme visualization available.</p>"
 
 
+def _build_topic_theme_heatmap_html(topic_theme_matrix, topic_order, total_docs):
+    """Generate Topic–Theme heatmap HTML."""
+    if not topic_theme_matrix:
+        return "<p>No topic–theme heatmap available.</p>"
+
+    try:
+        themes = list(next(iter(topic_theme_matrix.values())).keys())
+        z = np.array([[topic_theme_matrix[t].get(th, 0) for th in themes] for t in topic_order])
+        z = np.array(z, dtype=float)
+
+        fig = go.Figure(
+            data=go.Heatmap(
+                z=z,
+                x=themes,
+                y=[f"Topic {t}" for t in topic_order],
+                colorscale="Blues",
+                hoverongaps=False,
+            )
+        )
+
+        fig.update_layout(
+            title=f"Topic–Theme Heatmap (Article Density) – {total_docs} articles",
+            xaxis_title="Themes",
+            yaxis_title="Topics (sorted by volume)",
+            autosize=True,
+        )
+
+        return fig.to_html(full_html=False)
+
+    except Exception as e:
+        print(f"⚠️ Error generating topic–theme heatmap: {e}")
+        return "<p>No topic–theme heatmap available.</p>"
+
+
 # ------------------------------------------------
 # 🚀 Generate Dashboard
 # ------------------------------------------------
 def generate_dashboard():
     print("🚀 Generating upgraded dashboard...")
 
-    # Expect: docs, topic_summaries, topic_model, embeddings, theme_scores
-    docs, topic_summaries, topic_model, embeddings, theme_scores = generate_topic_results()
-    total_docs = len(docs)
+    (
+        docs,
+        topic_summaries,
+        topic_model,
+        embeddings,
+        theme_scores,
+        topic_theme_matrix,
+        topic_volume_sorted,
+    ) = generate_topic_results()
 
+    total_docs = len(docs)
     if not docs or not topic_model:
-        output_path = os.path.join(OUTPUT_DIR, "index.html")
-        with open(output_path, "w", encoding="utf-8") as f:
+        with open(os.path.join(OUTPUT_DIR, "index.html"), "w", encoding="utf-8") as f:
             f.write("<h3>No sufficient data to generate dashboard.</h3>")
         print("⚠️ Dashboard fallback created.")
         return
@@ -148,47 +189,36 @@ def generate_dashboard():
         print(f"⚠️ Error generating topic map: {e}")
         html_topic_map = "<p>No topic map available.</p>"
 
-    # 3️⃣ Theme metrics – start from engine output
+    # 3️⃣ Theme metrics
     prev_data = _load_previous_theme_signals()
     theme_metrics = {}
 
-    # Base from engine's theme_scores
     for theme, info in theme_scores.items():
         theme_metrics[theme] = {
             "volume": int(info.get("volume", 0)),
             "centrality": float(info.get("centrality", 0.0)),
         }
 
-    # Ensure "Others" theme exists & totals add up
     total_theme_volume = sum(v["volume"] for v in theme_metrics.values())
     if total_docs > total_theme_volume:
-        # Add or adjust Others
         others_volume = total_docs - total_theme_volume
         if "Others" in theme_metrics:
             theme_metrics["Others"]["volume"] += others_volume
         else:
-            theme_metrics["Others"] = {
-                "volume": others_volume,
-                "centrality": 0.0,
-            }
+            theme_metrics["Others"] = {"volume": others_volume, "centrality": 0.0}
 
-    # 4️⃣ Topicality = Δ volume vs prior day (keep as requested)
     for theme, m in theme_metrics.items():
         prev_volume = prev_data.get(theme, {}).get("volume", 0)
-        #m["topicality"] = m["volume"] - prev_volume
         if prev_volume > 0:
             m["topicality"] = (m["volume"] - prev_volume) / prev_volume
         else:
-            # If no prior data, treat as 0% rather than infinite
             m["topicality"] = 0.0
 
-    # 5️⃣ Rank ordering
     for metric in ["centrality", "topicality"]:
         ranked = sorted(theme_metrics.items(), key=lambda x: -x[1][metric])
         for rank, (theme, _) in enumerate(ranked, start=1):
             theme_metrics[theme][f"{metric}_rank"] = rank
 
-    # 6️⃣ Build theme_signals for template, with gentle rounding
     theme_signals = {
         theme: {
             "centrality": round(m["centrality"], 3),
@@ -196,7 +226,6 @@ def generate_dashboard():
             "centrality_rank": m.get("centrality_rank"),
             "topicality_rank": m.get("topicality_rank"),
             "volume": m.get("volume", 0),
-            #"prev_centrality": prev_data.get(theme, {}).get("centrality"),
             "prev_centrality": (
                 round(prev_data.get(theme, {}).get("centrality"), 3)
                 if prev_data.get(theme, {}).get("centrality") is not None
@@ -209,11 +238,12 @@ def generate_dashboard():
         for theme, m in theme_metrics.items()
     }
 
-    # 7️⃣ Save today's theme metrics for tomorrow
     _save_theme_signals(theme_metrics)
 
-    # 8️⃣ Theme map HTML
     html_theme_map = _build_theme_map_html(theme_signals, total_docs)
+    html_topic_theme_heatmap = _build_topic_theme_heatmap_html(
+        topic_theme_matrix, topic_volume_sorted, total_docs
+    )
 
     # 9️⃣ Prepare summaries for template
     summary_list = [
@@ -221,13 +251,12 @@ def generate_dashboard():
             "topic_id": k,
             "title": v.get("title", ""),
             "summary": v.get("summary", "").replace("\n", "<br>"),
-            "article_count": v.get("article_count", None),   # NEW FIELD
+            "article_count": v.get("article_count", None),
             "is_new": v.get("status") == "NEW",
             "is_persistent": v.get("status") == "PERSISTENT",
         }
         for k, v in topic_summaries.items()
     ]
-
 
     # 🔟 Render dashboard
     env = Environment(loader=FileSystemLoader("templates"))
@@ -236,16 +265,17 @@ def generate_dashboard():
         topic_map=html_topic_map,
         theme_map=html_theme_map,
         theme_signals=theme_signals,
+        topic_theme_heatmap=html_topic_theme_heatmap,
         summaries=summary_list,
         run_date=os.getenv("RUN_DATE", "Today"),
         total_docs=total_docs,
     )
 
-    output_path = os.path.join(OUTPUT_DIR, "index.html")
-    with open(output_path, "w", encoding="utf-8") as f:
+    with open(os.path.join(OUTPUT_DIR, "index.html"), "w", encoding="utf-8") as f:
         f.write(rendered_html)
     print("🎉 Dashboard updated successfully!")
 
 
 if __name__ == "__main__":
     generate_dashboard()
+
