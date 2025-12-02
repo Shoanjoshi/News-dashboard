@@ -37,21 +37,21 @@ jobs:
           echo "PYTHONPATH=$PYTHONPATH"
           python scripts/generate_dashboard.py
 
-      # 🔹 NEW: Commit dashboard HTML + JSON persistence file
+      # 🔹 Commit dashboard HTML + ALL JSON state files
       - name: Commit dashboard + JSON state
         shell: bash
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Stage required files
-          git add dashboard/index.html dashboard/yesterday_topics.json || echo "No files to add"
+          # Stage updated dashboard + all JSON persistence files
+          git add dashboard/index.html dashboard/*.json || echo "No files to add"
 
-          # Commit only if there are differences
+          # Commit only if changes exist
           if git diff --cached --quiet; then
             echo "No changes detected – skipping commit."
           else
-            git commit -m "Automated dashboard + JSON topic state update"
+            git commit -m "Automated dashboard + JSON state update"
             git push
           fi
 
