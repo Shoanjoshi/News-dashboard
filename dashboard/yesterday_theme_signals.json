@@ -1,65 +1,65 @@
 {
   "Recessionary pressures": {
-    "volume": 88,
-    "centrality": 0.9887640449438202,
-    "topicality": 0.03529411764705882,
+    "volume": 86,
+    "centrality": 0.966542750929368,
+    "topicality": -0.022727272727272728,
     "centrality_rank": 2,
-    "topicality_rank": 1
+    "topicality_rank": 8
   },
   "Inflation": {
     "volume": 97,
-    "centrality": 0.9438202247191011,
+    "centrality": 0.9442379182156134,
     "topicality": 0.0,
     "centrality_rank": 3,
     "topicality_rank": 5
   },
   "Private credit": {
     "volume": 71,
-    "centrality": 0.8689138576779026,
-    "topicality": -0.013888888888888888,
+    "centrality": 0.8698884758364313,
+    "topicality": 0.0,
     "centrality_rank": 4,
     "topicality_rank": 6
   },
   "AI": {
-    "volume": 59,
-    "centrality": 0.32209737827715357,
-    "topicality": 0.03508771929824561,
+    "volume": 58,
+    "centrality": 0.31970260223048325,
+    "topicality": -0.01694915254237288,
     "centrality_rank": 7,
-    "topicality_rank": 2
-  },
-  "Cyber attacks": {
-    "volume": 61,
-    "centrality": 0.2546816479400749,
-    "topicality": 0.016666666666666666,
-    "centrality_rank": 8,
-    "topicality_rank": 4
-  },
-  "Commercial real estate": {
-    "volume": 44,
-    "centrality": 0.651685393258427,
-    "topicality": -0.022222222222222223,
-    "centrality_rank": 6,
     "topicality_rank": 7
   },
-  "Consumer debt": {
-    "volume": 80,
-    "centrality": 1.0,
-    "topicality": -0.024390243902439025,
-    "centrality_rank": 1,
-    "topicality_rank": 8
+  "Cyber attacks": {
+    "volume": 63,
+    "centrality": 0.2788104089219331,
+    "topicality": 0.03278688524590164,
+    "centrality_rank": 8,
+    "topicality_rank": 1
   },
-  "Bank lending and credit risk": {
-    "volume": 58,
-    "centrality": 0.7453183520599251,
-    "topicality": -0.04918032786885246,
-    "centrality_rank": 5,
+  "Commercial real estate": {
+    "volume": 43,
+    "centrality": 0.6319702602230484,
+    "topicality": -0.022727272727272728,
+    "centrality_rank": 6,
     "topicality_rank": 9
   },
-  "Others": {
-    "volume": 122,
-    "centrality": 0.0,
-    "topicality": 0.025210084033613446,
-    "centrality_rank": 9,
+  "Consumer debt": {
+    "volume": 81,
+    "centrality": 1.0,
+    "topicality": 0.0125,
+    "centrality_rank": 1,
     "topicality_rank": 3
+  },
+  "Bank lending and credit risk": {
+    "volume": 59,
+    "centrality": 0.758364312267658,
+    "topicality": 0.017241379310344827,
+    "centrality_rank": 5,
+    "topicality_rank": 2
+  },
+  "Others": {
+    "volume": 123,
+    "centrality": 0.0,
+    "topicality": 0.00819672131147541,
+    "centrality_rank": 9,
+    "topicality_rank": 4
   }
 }
