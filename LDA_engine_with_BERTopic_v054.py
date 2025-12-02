@@ -1,6 +1,6 @@
 
 # ============================================
-# LDA_engine_with_BERTopic_v_fixed_clusters.py
+# LDA_engine_with_BERTopic_v045.py
 # Stable engine with:
 #  - BERTopic clustering using fixed clusters via KMeans
 #  - GPT summaries with holistic topic summaries
@@ -376,5 +376,6 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print(f"Docs: {len(d)}, topics: {len(s)}")
     print("Themes:", tm)
+
 
 
