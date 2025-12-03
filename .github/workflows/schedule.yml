@@ -2,7 +2,7 @@ name: Daily Dashboard Builder
 
 on:
   schedule:
-    - cron: "0 11 * * *"   # Runs at 7 AM ET daily
+    - cron: "0 11 * * *"   # Runs daily at 7 AM ET
   workflow_dispatch:
 
 jobs:
@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # IMPORTANT: required to switch branches
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -29,34 +31,39 @@ jobs:
           pip install -r requirements.txt
 
       - name: Generate Dashboard
-        shell: bash
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           export PYTHONPATH="${PYTHONPATH}:${{ github.workspace }}"
-          echo "PYTHONPATH=$PYTHONPATH"
           python scripts/generate_dashboard.py
 
-      # 🔹 Commit dashboard HTML + ALL JSON state files
-      - name: Commit dashboard + JSON state
-        shell: bash
+      # ==========================
+      # Push the built dashboard to gh-pages
+      # ==========================
+      - name: Deploy to gh-pages
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Stage updated dashboard + all JSON persistence files
-          git add dashboard/index.html dashboard/*.json || echo "No files to add"
-
-          # Commit only if changes exist
-          if git diff --cached --quiet; then
-            echo "No changes detected – skipping commit."
+          git fetch origin
+          
+          # Switch to gh-pages or create it
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+              git checkout gh-pages
           else
-            git commit -m "Automated dashboard + JSON state update"
-            git push
+              git checkout --orphan gh-pages
+              git rm -rf .
           fi
 
-      - name: Publish to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./dashboard
+          # Copy dashboard output into branch root
+          rm -rf ./*  # Clear previous deployment
+          cp -r dashboard/* .
+
+          git add -A
+
+          if git diff --cached --quiet; then
+            echo "No changes – skipping push."
+          else
+            git commit -m "Automated dashboard update"
+            git push origin gh-pages
+          fi
