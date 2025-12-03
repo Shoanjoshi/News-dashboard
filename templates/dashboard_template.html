@@ -1,277 +1,168 @@
-# ============================================
-# 📄 generate_dashboard.py
-# Version 5.10 – Theme layout upgrade + Topic×Theme heatmap (corrected)
-# ============================================
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Daily News Dashboard - {{ run_date }}</title>
 
-import os
-import json
-import numpy as np
-from jinja2 import Environment, FileSystemLoader
-import plotly.graph_objects as go
-
-from LDA_engine_with_BERTopic_v054 import generate_topic_results, THEMES
-
-
-# --------------------------------------------
-# Validate OpenAI Key
-# --------------------------------------------
-if not os.getenv("OPENAI_API_KEY"):
-    raise ValueError("⚠️ OPENAI_API_KEY missing.")
-
-
-# --------------------------------------------
-# Output Paths
-# --------------------------------------------
-OUTPUT_DIR = "dashboard"
-os.makedirs(OUTPUT_DIR, exist_ok=True)
-
-TOPIC_PERSISTENCE_JSON = os.path.join(OUTPUT_DIR, "yesterday_topics.json")
-THEME_SIGNALS_JSON = os.path.join(OUTPUT_DIR, "yesterday_theme_signals.json")
-
-
-# --------------------------------------------
-# Save topic embeddings (persistence)
-# --------------------------------------------
-def _save_topic_embeddings(embeddings, topic_summaries):
-    try:
-        with open(TOPIC_PERSISTENCE_JSON, "w", encoding="utf-8") as f:
-            json.dump(
-                {
-                    str(k): {
-                        "embedding": embeddings[k],
-                        "title": topic_summaries[k].get("title", "")
-                    }
-                    for k in embeddings
-                },
-                f,
-                indent=2,
-            )
-        print("📁 Saved topic persistence file.")
-    except Exception as e:
-        print("❌ Error saving topic JSON:", e)
-
-
-# --------------------------------------------
-# Load yesterday's theme metrics
-# --------------------------------------------
-def _load_previous_theme_signals():
-    if not os.path.exists(THEME_SIGNALS_JSON):
-        print("🟡 No prior theme signals found.")
-        return {}
-    try:
-        with open(THEME_SIGNALS_JSON, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception:
-        return {}
-
-
-# --------------------------------------------
-# Save today's theme metrics
-# --------------------------------------------
-def _save_theme_signals(theme_metrics):
-    try:
-        with open(THEME_SIGNALS_JSON, "w", encoding="utf-8") as f:
-            json.dump(theme_metrics, f, indent=2)
-        print("📁 Saved today's theme signals.")
-    except Exception as e:
-        print("❌ Error saving theme metrics:", e)
-
-
-# --------------------------------------------
-# Stretch helper for plotly figures
-# --------------------------------------------
-def _stretch_figure(fig):
-    fig.update_layout(
-        autosize=True,
-        margin=dict(l=5, r=5, t=40, b=5),
-    )
-    return fig
-
-
-# --------------------------------------------
-# Theme scatter plot
-# --------------------------------------------
-def _build_theme_map_html(theme_signals, total_docs):
-    try:
-        themes = list(theme_signals.keys())
-        xs = [theme_signals[t]["topicality"] for t in themes]
-        ys = [theme_signals[t]["centrality"] for t in themes]
-
-        fig = go.Figure(
-            data=[
-                go.Scatter(
-                    x=xs, y=ys,
-                    mode="markers+text",
-                    text=themes,
-                    textposition="top center"
-                )
-            ]
-        )
-
-        fig.update_layout(
-            title=f"Theme Distance Map – {total_docs} articles",
-            xaxis_title="Topicality (% change)",
-            yaxis_title="Centrality",
-            autosize=True,
-        )
-
-        fig = _stretch_figure(fig)
-        return fig.to_html(full_html=False)
-
-    except Exception as e:
-        print("⚠️ Error generating theme scatter:", e)
-        return "<p>Error generating theme plot.</p>"
-
-
-# --------------------------------------------
-# Topic × Theme Heatmap
-# --------------------------------------------
-def _build_heatmap(topic_summaries, theme_metrics, topics):
-    """
-    Build heatmap using:
-    - row: topic title (ordered by topic ID)
-    - column: themes + 'Others'
-    - value: count of article IDs intersecting theme's article set
-    """
-
-    try:
-        ordered_topic_ids = sorted(topic_summaries.keys())
-        row_labels = [topic_summaries[t]["title"] for t in ordered_topic_ids]
-        col_labels = THEMES + ["Others"]
-
-        heat = np.zeros((len(ordered_topic_ids), len(col_labels)), dtype=int)
-
-        # Build inverse mapping: topic_id -> list of article indices
-        topic_to_articles = {tid: [] for tid in ordered_topic_ids}
-        for idx, t in enumerate(topics):
-            if t in topic_to_articles:
-                topic_to_articles[t].append(idx)
-
-        # Fill heatmap
-        for r, topic_id in enumerate(ordered_topic_ids):
-            topic_articles = set(topic_to_articles[topic_id])
-
-            for c, theme in enumerate(col_labels):
-                theme_articles = set(theme_metrics[theme]["articles_raw"])
-                heat[r][c] = len(topic_articles & theme_articles)
-
-        # Construct plot
-        fig = go.Figure(
-            data=go.Heatmap(
-                z=heat,
-                x=col_labels,
-                y=row_labels,
-                colorscale="Blues",
-                showscale=True,
-                colorbar=dict(lenmode="fraction", len=0.8),
-            )
-        )
-
-        fig.update_layout(
-            title="Topic × Theme Volume Heatmap",
-            xaxis_nticks=len(col_labels),
-            yaxis=dict(automargin=True),
-        )
-
-        fig = _stretch_figure(fig)
-        return fig.to_html(full_html=False)
-
-    except Exception as e:
-        print("⚠️ Heatmap error:", e)
-        return "<p>Heatmap unavailable.</p>"
-
-
-# ============================================
-# 🚀 MAIN DASHBOARD FUNCTION
-# ============================================
-def generate_dashboard():
-    print("🚀 Generating dashboard...")
-
-    docs, topic_summaries, topic_model, embeddings, theme_metrics = generate_topic_results()
-    total_docs = len(docs)
-
-    if not docs or not topic_model:
-        print("⚠️ No docs available.")
-        return
-
-    # Save embeddings state
-    _save_topic_embeddings(embeddings, topic_summaries)
-
-    # Load yesterday's metrics
-    prev_data = _load_previous_theme_signals()
-
-    # Compute topicality % change + ranking
-    for theme, m in theme_metrics.items():
-        prev_vol = prev_data.get(theme, {}).get("volume", 0)
-        m["topicality"] = (m["volume"] - prev_vol) / prev_vol if prev_vol else 0
-
-    for metric in ["centrality", "topicality"]:
-        ordered = sorted(theme_metrics.items(), key=lambda x: -x[1][metric])
-        for rank, (theme, _) in enumerate(ordered, start=1):
-            theme_metrics[theme][f"{metric}_rank"] = rank
-
-    # Build theme_signals for template
-    theme_signals = {
-        t: {
-            "centrality": round(m["centrality"], 3),
-            "topicality": round(m["topicality"], 3),
-            "centrality_rank": m["centrality_rank"],
-            "topicality_rank": m["topicality_rank"],
-            "prev_centrality": (
-                round(prev_data.get(t, {}).get("centrality", 0), 3)
-                if prev_data.get(t)
-                else None
-            ),
-            "prev_topicality": prev_data.get(t, {}).get("topicality"),
-            "prev_centrality_rank": prev_data.get(t, {}).get("centrality_rank"),
-            "prev_topicality_rank": prev_data.get(t, {}).get("topicality_rank"),
+    <style>
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            margin: 10px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 20px;
+            height: 96vh;
+            background-color: #fafafa;
         }
-        for t, m in theme_metrics.items()
-    }
 
-    # Save today's theme metrics
-    _save_theme_signals(theme_metrics)
-
-    # Build plot HTML
-    topic_map_html = _stretch_figure(topic_model.visualize_topics()).to_html(full_html=False)
-    theme_map_html = _build_theme_map_html(theme_signals, total_docs)
-    heatmap_html = _build_heatmap(topic_summaries, theme_metrics, topic_model.topics_)
-
-    # Prepare summaries
-    summary_list = [
-        {
-            "topic_id": tid,
-            "title": s["title"],
-            "summary": s["summary"],
-            "article_count": s["article_count"],
-            "is_new": s.get("status") == "NEW",
-            "is_persistent": s.get("status") == "PERSISTENT",
+        .panel {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 18px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.06);
+            background: white;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
         }
-        for tid, s in topic_summaries.items()
-    ]
 
-    # Render HTML
-    env = Environment(loader=FileSystemLoader("templates"))
-    template = env.get_template("dashboard_template.html")
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: #1e2a35;
+        }
 
-    html = template.render(
-        topic_map=topic_map_html,
-        theme_map=theme_map_html,
-        heatmap=heatmap_html,
-        theme_signals=theme_signals,
-        summaries=summary_list,
-        run_date=os.getenv("RUN_DATE", "Today"),
-        total_docs=total_docs,
-    )
+        .side-by-side {
+            display: flex;
+            flex-direction: row;
+            gap: 12px;
+            flex: 1;
+            overflow: hidden;
+        }
 
-    with open(os.path.join(OUTPUT_DIR, "index.html"), "w", encoding="utf-8") as f:
-        f.write(html)
+        .half {
+            flex: 1;
+            overflow-y: auto;
+        }
 
-    print("🎉 Dashboard updated.")
+        .scrollable {
+            flex: 1;
+            overflow-y: auto;
+            border-top: 1px solid #eee;
+            padding-top: 5px;
+        }
 
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
 
-# --------------------------------------------
-# Manual execution
-# --------------------------------------------
-if __name__ == "__main__":
-    generate_dashboard()
+        th, td {
+            border: 1px solid #ccc;
+            padding: 10px;
+            font-size: 14px;
+            vertical-align: top;
+        }
+
+        th {
+            background-color: #f2f3f5;
+            font-size: 15px;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .new-topic { background-color: #fff3cd; }
+        .persistent-topic { background-color: #d4edda; }
+
+        .topic-col { width: 8%; text-align: center; font-weight: bold; }
+        .count-col { width: 10%; text-align: center; font-weight: 600; }
+        .title-col { width: 22%; font-weight: 600; }
+        .summary-col { width: 60%; }
+    </style>
+</head>
+
+<body>
+
+    <!-- 🗺 TOP-LEFT: Topic Map -->
+    <div class="panel">
+        <h2>🗺 Topic Map</h2>
+        <div class="scrollable">{{ topic_map | safe }}</div>
+    </div>
+
+    <!-- 🎯 TOP-RIGHT: Theme Map + Theme Table -->
+    <div class="panel">
+        <h2>🎯 Theme Signals & Distance Map</h2>
+
+        <div class="side-by-side">
+            <div class="half">
+                {{ theme_map | safe }}
+            </div>
+
+            <div class="half scrollable">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Theme</th>
+                            <th>Centrality<br>(Rank)</th>
+                            <th>Topicality<br>(Rank)</th>
+                            <th>Prior<br>Centrality</th>
+                            <th>Prior<br>Topicality</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for theme, data in theme_signals.items() %}
+                        <tr>
+                            <td>{{ theme }}</td>
+                            <td>{{ data.centrality_rank }} ({{ data.centrality }})</td>
+                            <td>{{ data.topicality_rank }} ({{ data.topicality }})</td>
+                            <td>{{ data.prev_centrality_rank }} ({{ data.prev_centrality }})</td>
+                            <td>{{ data.prev_topicality_rank }} ({{ data.prev_topicality }})</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- 📝 BOTTOM-LEFT: Topic Summaries -->
+    <div class="panel">
+        <h2>📝 Topic Summaries – {{ run_date }}</h2>
+        <div class="scrollable">
+            <table>
+                <thead>
+                    <tr>
+                        <th class="topic-col">ID</th>
+                        <th class="count-col">Articles</th>
+                        <th class="title-col">Title</th>
+                        <th class="summary-col">Summary</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in summaries %}
+                    <tr class="{% if item.is_new %}new-topic{% elif item.is_persistent %}persistent-topic{% endif %}">
+                        <td class="topic-col">{{ item.topic_id }}</td>
+                        <td class="count-col">{{ item.article_count }}</td>
+                        <td class="title-col">{{ item.title }}</td>
+                        <td class="summary-col">{{ item.summary | safe }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 🔥 BOTTOM-RIGHT: Heatmap -->
+    <div class="panel">
+        <h2>🔥 Topic × Theme Heatmap</h2>
+        <div class="scrollable">
+            {{ heatmap | safe }}
+        </div>
+    </div>
+
+</body>
+</html>
