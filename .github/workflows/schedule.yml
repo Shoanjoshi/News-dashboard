@@ -2,7 +2,7 @@ name: Daily Dashboard Builder
 
 on:
   schedule:
-    - cron: "0 11 * * *"   # Runs at 7 AM ET daily
+    - cron: "0 11 * * *"   # Runs 7AM ET daily
   workflow_dispatch:
 
 jobs:
@@ -10,71 +10,82 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-
-      # 1️⃣ Checkout the repository
+      # -------------------------------
+      # Checkout repo
+      # -------------------------------
       - name: Checkout Repo
         uses: actions/checkout@v4
 
-      # 2️⃣ Setup Python
+      # -------------------------------
+      # Python setup
+      # -------------------------------
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
-      # 3️⃣ Install system dependencies
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libxml2-dev libxslt-dev
 
-      # 4️⃣ Install Python dependencies
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
-      # 5️⃣ Generate Dashboard
+      # -------------------------------
+      # Generate Dashboard
+      # -------------------------------
       - name: Generate Dashboard
+        shell: bash
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          export PYTHONPATH="${PYTHONPATH}:${GITHUB_WORKSPACE}"
+          export PYTHONPATH="${GITHUB_WORKSPACE}"
           echo "PYTHONPATH=$PYTHONPATH"
+
           python scripts/generate_dashboard.py
 
-      # 6️⃣ Deploy dashboard/ to gh-pages without checkout conflicts
+      # -------------------------------
+      # Deploy to gh-pages
+      # -------------------------------
       - name: Deploy to gh-pages
         shell: bash
         run: |
           echo "🚀 Deploying to gh-pages..."
 
+          # Configure git
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Create a fresh deployment directory
+          # Fresh deployment directory
           rm -rf gh-pages-dir
           mkdir gh-pages-dir
           cd gh-pages-dir
 
-          # Initialize a clean repo pointing to the GH repo
+          # Init empty repository
           git init
-          git remote add origin https://github.com/${GITHUB_REPOSITORY}.git
+
+          # Authenticated remote (critical!)
+          git remote add origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${GITHUB_REPOSITORY}.git
 
           # Fetch gh-pages if it exists
           git fetch origin gh-pages || echo "gh-pages does not yet exist."
 
-          # Checkout or create gh-pages
+          # Create/switch branch
           git checkout -B gh-pages
 
-          # Clean branch contents
+          # Clear old contents
           rm -rf ./*
 
-          # Copy dashboard output
+          # Copy new site output
           cp -r ../dashboard/* .
 
-          # Stage & commit
+          # Stage changes
           git add -A
 
+          # Commit + push only if changes exist
           if git diff --cached --quiet; then
             echo "No changes — skipping deploy."
           else
