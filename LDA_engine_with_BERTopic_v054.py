@@ -1,7 +1,9 @@
+
 import os
 import feedparser
 import numpy as np
 from collections import Counter
+from textwrap import wrap
 
 from openai import OpenAI
 from bertopic import BERTopic
@@ -10,9 +12,13 @@ from umap import UMAP
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 from sentence_transformers import SentenceTransformer
+import plotly.graph_objects as go
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+# ============================================================
+# CONFIG
+# ============================================================
 RSS_FEEDS = [
     "https://feeds.reuters.com/reuters/businessNews",
     "https://feeds.reuters.com/reuters/markets",
@@ -79,12 +85,13 @@ THEME_DESCRIPTIONS = {
 
 SIMILARITY_THRESHOLD = 0.20
 
-
+# ============================================================
+# HELPERS
+# ============================================================
 def _normalize_rows(mat):
     norms = np.linalg.norm(mat, axis=1, keepdims=True)
     norms[norms == 0] = 1
     return mat / norms
-
 
 def fetch_articles():
     docs = []
@@ -102,14 +109,11 @@ def fetch_articles():
                     docs.append(content.strip()[:1200])
         except Exception as e:
             print(f"Feed error {feed}: {e}")
-
     print("Fetched articles:", len(docs))
     return docs
 
-
 def gpt_summarize_topic(topic_id, docs_for_topic):
     text = "\n\n".join(docs_for_topic[:8])
-
     prompt = f"""
 TITLE: <3–5 WORDS>
 SUMMARY: <2–4 sentences>
@@ -117,7 +121,6 @@ SUMMARY: <2–4 sentences>
 Content:
 {text}
 """
-
     try:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -129,9 +132,7 @@ Content:
             return {"title": t[0].strip(), "summary": t[1].strip()}
     except:
         pass
-
     return {"title": f"TOPIC {topic_id}", "summary": "Summary unavailable."}
-
 
 def run_bertopic_analysis(docs):
     umap_model = UMAP(n_neighbors=30, n_components=2, min_dist=0.0, metric="cosine")
@@ -147,7 +148,70 @@ def run_bertopic_analysis(docs):
     topics, probs = topic_model.fit_transform(docs)
     return topic_model, topics
 
+# ============================================================
+# BUILD IMPROVED TOPIC MAP
+# ============================================================
+def build_topic_map(topic_embeddings, summaries):
+    topic_ids = sorted(topic_embeddings.keys())
+    xs = [topic_embeddings[i][0] for i in topic_ids]
+    ys = [topic_embeddings[i][1] for i in topic_ids]
 
+    volumes = []
+    titles = {}
+    for item in summaries.values():
+        tid = item.get("topic_id") or list(summaries.keys())[list(summaries.values()).index(item)]
+        titles[tid] = item["title"]
+        volumes.append(item["article_count"])
+
+    size_scale = np.interp(volumes, (min(volumes), max(volumes)), (25, 70))
+    labels = {tid: "<br>".join(wrap(titles[tid], width=18)) for tid in topic_ids}
+
+    label_offsets = {}
+    for i, tid in enumerate(topic_ids):
+        x, y = xs[i], ys[i]
+        offset_x = 0.02 * (i % 3 - 1)
+        offset_y = 0.03 * ((i // 3) % 3 - 1)
+        label_offsets[tid] = (x + offset_x, y + offset_y)
+
+    scatter = go.Scatter(
+        x=xs,
+        y=ys,
+        mode="markers",
+        marker=dict(
+            size=size_scale,
+            color="rgba(60,120,180,0.25)",
+            line=dict(color="rgba(60,120,180,0.9)", width=2),
+        ),
+        text=[titles[i] for i in topic_ids],
+        hovertemplate="<b>%{text}</b><extra></extra>",
+    )
+
+    label_scatter = go.Scatter(
+        x=[label_offsets[tid][0] for tid in topic_ids],
+        y=[label_offsets[tid][1] for tid in topic_ids],
+        mode="text",
+        text=[labels[i] for i in topic_ids],
+        textfont=dict(size=14, color="black"),
+        showlegend=False,
+        hoverinfo="skip",
+    )
+
+    fig = go.Figure([scatter, label_scatter])
+    fig.update_layout(
+        title=dict(text="<b>Intertopic Distance Map</b>", x=0.5, font=dict(size=24)),
+        autosize=True,
+        height=700,
+        margin=dict(l=10, r=10, t=80, b=10),
+        xaxis=dict(showgrid=False, zeroline=False, visible=False),
+        yaxis=dict(showgrid=False, zeroline=False, visible=False),
+        plot_bgcolor="white",
+        hovermode="closest",
+    )
+    return fig.to_html(full_html=False)
+
+# ============================================================
+# MAIN TOPIC + THEME PIPELINE
+# ============================================================
 def generate_topic_results():
     docs = fetch_articles()
     if not docs:
@@ -155,7 +219,6 @@ def generate_topic_results():
 
     topic_model, topics = run_bertopic_analysis(docs)
     topic_info = topic_model.get_topic_info()
-
     valid_topic_ids = [t for t in topic_info.Topic if t != -1]
 
     summaries = {}
@@ -166,39 +229,26 @@ def generate_topic_results():
         topic_docs = [docs[i] for i in doc_ids[:5]]
         summaries[topic_id] = gpt_summarize_topic(topic_id, topic_docs)
         summaries[topic_id]["article_count"] = len(doc_ids)
+        summaries[topic_id]["topic_id"] = topic_id
         topic_embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
 
-    # --------------------------------------------------------------------
-    # THEME ASSIGNMENT (heatmap fix: keep article lists)
-    # --------------------------------------------------------------------
     model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-
     art_emb = _normalize_rows(model.encode(docs, show_progress_bar=False))
-
     theme_texts = [f"{t}. {THEME_DESCRIPTIONS[t]}" for t in THEMES]
     theme_emb = _normalize_rows(model.encode(theme_texts, show_progress_bar=False))
 
-    theme_metrics = {
-        t: {"volume": 0, "centrality": 0.0, "articles": set()}
-        for t in THEMES
-    }
+    theme_metrics = {t: {"volume": 0, "centrality": 0.0, "articles": set()} for t in THEMES}
     theme_metrics["Others"] = {"volume": 0, "centrality": 0.0, "articles": set()}
 
     for i, emb in enumerate(art_emb):
         sims = cosine_similarity([emb], theme_emb)[0]
-        assigned = [
-            THEMES[idx]
-            for idx, score in enumerate(sims)
-            if score >= SIMILARITY_THRESHOLD
-        ]
+        assigned = [THEMES[idx] for idx, score in enumerate(sims) if score >= SIMILARITY_THRESHOLD]
         if not assigned:
             assigned = ["Others"]
-
         for theme in assigned:
             theme_metrics[theme]["volume"] += 1
             theme_metrics[theme]["articles"].add(i)
 
-    # CENTRALITY
     for t in THEMES:
         overlaps = 0
         Ta = theme_metrics[t]["articles"]
@@ -210,18 +260,18 @@ def generate_topic_results():
     max_c = max(theme_metrics[t].get("centrality_raw", 0) for t in THEMES) or 1
     for t in THEMES:
         theme_metrics[t]["centrality"] = theme_metrics[t]["centrality_raw"] / max_c
-
     theme_metrics["Others"]["centrality"] = 0.0
 
-    # CLEANUP but keep article IDs for heatmap
     for t in theme_metrics:
         theme_metrics[t].pop("centrality_raw", None)
         theme_metrics[t]["articles_raw"] = list(theme_metrics[t]["articles"])
 
     return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
-
+# ============================================================
+# TEST RUN
+# ============================================================
 if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print("Docs:", len(d))
-    print("Themes:", tm)
+    print("Themes:", tm.keys())
