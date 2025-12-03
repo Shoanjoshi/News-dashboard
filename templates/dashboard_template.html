@@ -5,6 +5,7 @@
     <title>Daily News Dashboard - {{ run_date }}</title>
 
     <style>
+        /* ===== Global Grid Layout ===== */
         body {
             font-family: 'Segoe UI', Arial, sans-serif;
             margin: 10px;
@@ -16,6 +17,7 @@
             background-color: #fafafa;
         }
 
+        /* ===== Panels ===== */
         .panel {
             border: 1px solid #ddd;
             border-radius: 8px;
@@ -34,19 +36,24 @@
             color: #1e2a35;
         }
 
-        .side-by-side {
-            display: flex;
-            flex-direction: row;
-            gap: 12px;
+        /* ===== Topic Map Container (no scroll, full stretch) ===== */
+        .topic-map-container {
             flex: 1;
-            overflow: hidden;
+            width: 100%;
+            height: 100%;
         }
 
-        .half {
-            flex: 1;
-            overflow-y: auto;
+        /* ===== Theme View Toggle ===== */
+        .toggle-container {
+            margin-bottom: 10px;
         }
 
+        select {
+            padding: 6px;
+            font-size: 14px;
+        }
+
+        /* ===== Scrollable Sections ===== */
         .scrollable {
             flex: 1;
             overflow-y: auto;
@@ -54,23 +61,21 @@
             padding-top: 5px;
         }
 
+        /* ===== Table Formatting ===== */
         table {
             width: 100%;
             border-collapse: collapse;
             table-layout: fixed;
         }
-
         th, td {
             border: 1px solid #ccc;
             padding: 10px;
             font-size: 14px;
             vertical-align: top;
         }
-
         th {
             background-color: #f2f3f5;
-            font-size: 15px;
-            font-weight: 600;
+            font-weight: bold;
             text-align: center;
         }
 
@@ -81,75 +86,77 @@
         .count-col { width: 10%; text-align: center; font-weight: 600; }
         .title-col { width: 22%; font-weight: 600; }
         .summary-col { width: 60%; }
+
     </style>
+
+    <script>
+        /* Theme Panel Toggle Logic */
+        function switchThemeView() {
+            const mode = document.getElementById("theme_mode").value;
+            document.getElementById("theme_scatter").style.display =
+                (mode === "scatter" ? "block" : "none");
+            document.getElementById("theme_table").style.display =
+                (mode === "table" ? "block" : "none");
+        }
+    </script>
 </head>
 
 <body>
 
-    <!-- 🗺 TOP-LEFT: Topic Map -->
+    <!-- 🗺 1️⃣ TOP-LEFT: Topic Map -->
     <div class="panel">
         <h2>🗺 Topic Map</h2>
-        <div class="scrollable">{{ topic_map | safe }}</div>
+        <div class="topic-map-container">
+            {{ topic_map | safe }}
+        </div>
     </div>
 
-<!-- 🎯 2️⃣ TOP-RIGHT: Theme Signals -->
-<div class="panel">
-    <h2>🎯 Theme Signals & Distance Map</h2>
+    <!-- 🎯 2️⃣ TOP-RIGHT: Theme View (Dropdown: Scatter/Table) -->
+    <div class="panel">
+        <h2>🎯 Theme Signals & Distance Map</h2>
 
-    <!-- Dropdown to switch views -->
-    <select id="themeViewSelector" style="margin-bottom: 10px; padding: 6px;">
-        <option value="scatter">Theme Scatter Plot</option>
-        <option value="table">Theme Metrics Table</option>
-    </select>
+        <div class="toggle-container">
+            <label><b>View:</b></label>
+            <select id="theme_mode" onchange="switchThemeView()">
+                <option value="scatter">Theme Scatter Plot</option>
+                <option value="table">Theme Metrics Table</option>
+            </select>
+        </div>
 
-    <div id="themeScatterView" class="scrollable">
-        {{ theme_map | safe }}
+        <!-- Scatter Plot -->
+        <div id="theme_scatter" style="flex:1;">
+            {{ theme_map | safe }}
+        </div>
+
+        <!-- Metrics Table -->
+        <div id="theme_table" class="scrollable" style="display:none;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Theme</th>
+                        <th>Centrality<br>(Rank)</th>
+                        <th>Topicality<br>(Rank)</th>
+                        <th>Prior Centrality</th>
+                        <th>Prior Topicality</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for theme, data in theme_signals.items() %}
+                    <tr>
+                        <td>{{ theme }}</td>
+                        <td>{{ data.centrality_rank }} ({{ data.centrality }})</td>
+                        <td>{{ data.topicality_rank }} ({{ data.topicality }})</td>
+                        <td>{{ data.prev_centrality_rank }} ({{ data.prev_centrality }})</td>
+                        <td>{{ data.prev_topicality_rank }} ({{ data.prev_topicality }})</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
     </div>
 
-    <div id="themeTableView" class="scrollable" style="display:none;">
-        <table>
-            <thead>
-                <tr>
-                    <th>Theme</th>
-                    <th>Centrality<br>(Rank)</th>
-                    <th>Topicality<br>(Rank)</th>
-                    <th>Prior<br>Centrality</th>
-                    <th>Prior<br>Topicality</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for theme, data in theme_signals.items() %}
-                <tr>
-                    <td>{{ theme }}</td>
-                    <td>{{ data.centrality_rank }} ({{ data.centrality }})</td>
-                    <td>{{ data.topicality_rank }} ({{ data.topicality }})</td>
-                    <td>{{ data.prev_centrality_rank }} ({{ data.prev_centrality }})</td>
-                    <td>{{ data.prev_topicality_rank }} ({{ data.prev_topicality }})</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-
-<!-- JavaScript for switching views -->
-<script>
-document.getElementById("themeViewSelector").addEventListener("change", function() {
-    const scatter = document.getElementById("themeScatterView");
-    const table = document.getElementById("themeTableView");
-
-    if (this.value === "scatter") {
-        scatter.style.display = "block";
-        table.style.display = "none";
-    } else {
-        scatter.style.display = "none";
-        table.style.display = "block";
-    }
-});
-</script>
-
-
-    <!-- 📝 BOTTOM-LEFT: Topic Summaries -->
+    <!-- 📝 3️⃣ BOTTOM-LEFT: Topic Summaries -->
     <div class="panel">
         <h2>📝 Topic Summaries – {{ run_date }}</h2>
         <div class="scrollable">
@@ -176,7 +183,7 @@ document.getElementById("themeViewSelector").addEventListener("change", function
         </div>
     </div>
 
-    <!-- 🔥 BOTTOM-RIGHT: Heatmap -->
+    <!-- 🔥 4️⃣ BOTTOM-RIGHT: Heatmap -->
     <div class="panel">
         <h2>🔥 Topic × Theme Heatmap</h2>
         <div class="scrollable">
@@ -186,3 +193,4 @@ document.getElementById("themeViewSelector").addEventListener("change", function
 
 </body>
 </html>
+
