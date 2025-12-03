@@ -2,7 +2,7 @@ name: Daily Dashboard Builder
 
 on:
   schedule:
-    - cron: "0 11 * * *"   # 7 AM ET
+    - cron: "0 11 * * *"
   workflow_dispatch:
 
 jobs:
@@ -12,8 +12,6 @@ jobs:
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -34,11 +32,13 @@ jobs:
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
+          echo "📌 Setting PYTHONPATH"
+          export PYTHONPATH="$GITHUB_WORKSPACE"
+          echo "PYTHONPATH=$PYTHONPATH"
+
+          echo "📌 Running dashboard generator"
           python scripts/generate_dashboard.py
 
-      # ---------------------------------------------------------
-      # 🚀 Deploy to gh-pages (Reliable method)
-      # ---------------------------------------------------------
       - name: Deploy to gh-pages
         run: |
           echo "🔧 Switching to gh-pages branch..."
@@ -48,21 +48,18 @@ jobs:
 
           git fetch origin
 
+          # Switch or create branch
           if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
               git checkout gh-pages
           else
               git checkout --orphan gh-pages
           fi
 
+          # Clean existing output
           rm -rf ./*
 
-          if [ -d "$GITHUB_WORKSPACE/dashboard" ]; then
-              cp -r "$GITHUB_WORKSPACE/dashboard/"* .
-          else
-              echo "❌ ERROR: dashboard folder not found!"
-              ls -R "$GITHUB_WORKSPACE"
-              exit 1
-          fi
+          # Copy new dashboard
+          cp -r dashboard/* .
 
           git add -A
 
@@ -71,5 +68,5 @@ jobs:
           else
             git commit -m "Automated dashboard update"
             git push origin gh-pages
-            echo "🚀 Dashboard deployed."
+            echo "🚀 Dashboard deployed to gh-pages."
           fi
