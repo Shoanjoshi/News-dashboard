@@ -2,7 +2,7 @@ name: Daily Dashboard Builder
 
 on:
   schedule:
-    - cron: "0 11 * * *"   # Runs daily at 7 AM ET
+    - cron: "0 11 * * *"   # Runs at 7 AM ET daily
   workflow_dispatch:
 
 jobs:
@@ -10,11 +10,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ----------------------------------------
+      # CHECKOUT REPO (main branch)
+      # ----------------------------------------
       - name: Checkout Repo
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0     # IMPORTANT: required to switch branches
 
+      # ----------------------------------------
+      # PYTHON SETUP
+      # ----------------------------------------
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
@@ -30,34 +34,49 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      # ----------------------------------------
+      # RUN DASHBOARD BUILDER (writes into ./dashboard)
+      # ----------------------------------------
       - name: Generate Dashboard
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           export PYTHONPATH="${PYTHONPATH}:${{ github.workspace }}"
+          echo "PYTHONPATH=$PYTHONPATH"
           python scripts/generate_dashboard.py
 
-      # ==========================
-      # Push the built dashboard to gh-pages
-      # ==========================
+      # ----------------------------------------
+      # SAVE OUTPUT BEFORE SWITCHING BRANCHES
+      # (this is the key difference!)
+      # ----------------------------------------
+      - name: Save dashboard output
+        run: |
+          mkdir -p /tmp/dashboard
+          # copy everything from ./dashboard into temp
+          cp -r dashboard/. /tmp/dashboard/
+
+      # ----------------------------------------
+      # DEPLOY TO gh-pages
+      # ----------------------------------------
       - name: Deploy to gh-pages
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
           git fetch origin
-          
-          # Switch to gh-pages or create it
+
+          # Switch to gh-pages (or create it)
           if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
               git checkout gh-pages
           else
               git checkout --orphan gh-pages
-              git rm -rf .
           fi
 
-          # Copy dashboard output into branch root
-          rm -rf ./*  # Clear previous deployment
-          cp -r dashboard/* .
+          # Remove previous published contents
+          rm -rf ./*
+
+          # Restore freshly built dashboard into branch root
+          cp -r /tmp/dashboard/. .
 
           git add -A
 
