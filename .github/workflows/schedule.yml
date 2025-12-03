@@ -2,7 +2,7 @@ name: Daily Dashboard Builder
 
 on:
   schedule:
-    - cron: "0 11 * * *"
+    - cron: "0 11 * * *"   # Runs at 7 AM ET daily
   workflow_dispatch:
 
 jobs:
@@ -10,63 +10,75 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
+      # 1️⃣ Checkout the repository
       - name: Checkout Repo
         uses: actions/checkout@v4
 
+      # 2️⃣ Setup Python
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
 
+      # 3️⃣ Install system dependencies
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libxml2-dev libxslt-dev
 
+      # 4️⃣ Install Python dependencies
       - name: Install Python dependencies
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      # 5️⃣ Generate Dashboard
       - name: Generate Dashboard
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          echo "📌 Setting PYTHONPATH"
-          export PYTHONPATH="$GITHUB_WORKSPACE"
+          export PYTHONPATH="${PYTHONPATH}:${GITHUB_WORKSPACE}"
           echo "PYTHONPATH=$PYTHONPATH"
-
-          echo "📌 Running dashboard generator"
           python scripts/generate_dashboard.py
 
+      # 6️⃣ Deploy dashboard/ to gh-pages without checkout conflicts
       - name: Deploy to gh-pages
+        shell: bash
         run: |
-          echo "🔧 Switching to gh-pages branch..."
+          echo "🚀 Deploying to gh-pages..."
 
-          git config --local user.name "github-actions[bot]"
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          git fetch origin
+          # Create a fresh deployment directory
+          rm -rf gh-pages-dir
+          mkdir gh-pages-dir
+          cd gh-pages-dir
 
-          # Switch or create branch
-          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
-              git checkout gh-pages
-          else
-              git checkout --orphan gh-pages
-          fi
+          # Initialize a clean repo pointing to the GH repo
+          git init
+          git remote add origin https://github.com/${GITHUB_REPOSITORY}.git
 
-          # Clean existing output
+          # Fetch gh-pages if it exists
+          git fetch origin gh-pages || echo "gh-pages does not yet exist."
+
+          # Checkout or create gh-pages
+          git checkout -B gh-pages
+
+          # Clean branch contents
           rm -rf ./*
 
-          # Copy new dashboard
-          cp -r dashboard/* .
+          # Copy dashboard output
+          cp -r ../dashboard/* .
 
+          # Stage & commit
           git add -A
 
           if git diff --cached --quiet; then
-            echo "No changes – skipping push."
+            echo "No changes — skipping deploy."
           else
             git commit -m "Automated dashboard update"
-            git push origin gh-pages
-            echo "🚀 Dashboard deployed to gh-pages."
+            git push origin gh-pages --force
+            echo "✅ Dashboard deployed successfully."
           fi
