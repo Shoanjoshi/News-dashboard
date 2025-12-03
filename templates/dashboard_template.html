@@ -92,42 +92,62 @@
         <div class="scrollable">{{ topic_map | safe }}</div>
     </div>
 
-    <!-- 🎯 TOP-RIGHT: Theme Map + Theme Table -->
-    <div class="panel">
-        <h2>🎯 Theme Signals & Distance Map</h2>
+<!-- 🎯 2️⃣ TOP-RIGHT: Theme Signals -->
+<div class="panel">
+    <h2>🎯 Theme Signals & Distance Map</h2>
 
-        <div class="side-by-side">
-            <div class="half">
-                {{ theme_map | safe }}
-            </div>
+    <!-- Dropdown to switch views -->
+    <select id="themeViewSelector" style="margin-bottom: 10px; padding: 6px;">
+        <option value="scatter">Theme Scatter Plot</option>
+        <option value="table">Theme Metrics Table</option>
+    </select>
 
-            <div class="half scrollable">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Theme</th>
-                            <th>Centrality<br>(Rank)</th>
-                            <th>Topicality<br>(Rank)</th>
-                            <th>Prior<br>Centrality</th>
-                            <th>Prior<br>Topicality</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for theme, data in theme_signals.items() %}
-                        <tr>
-                            <td>{{ theme }}</td>
-                            <td>{{ data.centrality_rank }} ({{ data.centrality }})</td>
-                            <td>{{ data.topicality_rank }} ({{ data.topicality }})</td>
-                            <td>{{ data.prev_centrality_rank }} ({{ data.prev_centrality }})</td>
-                            <td>{{ data.prev_topicality_rank }} ({{ data.prev_topicality }})</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-
-        </div>
+    <div id="themeScatterView" class="scrollable">
+        {{ theme_map | safe }}
     </div>
+
+    <div id="themeTableView" class="scrollable" style="display:none;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Theme</th>
+                    <th>Centrality<br>(Rank)</th>
+                    <th>Topicality<br>(Rank)</th>
+                    <th>Prior<br>Centrality</th>
+                    <th>Prior<br>Topicality</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for theme, data in theme_signals.items() %}
+                <tr>
+                    <td>{{ theme }}</td>
+                    <td>{{ data.centrality_rank }} ({{ data.centrality }})</td>
+                    <td>{{ data.topicality_rank }} ({{ data.topicality }})</td>
+                    <td>{{ data.prev_centrality_rank }} ({{ data.prev_centrality }})</td>
+                    <td>{{ data.prev_topicality_rank }} ({{ data.prev_topicality }})</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- JavaScript for switching views -->
+<script>
+document.getElementById("themeViewSelector").addEventListener("change", function() {
+    const scatter = document.getElementById("themeScatterView");
+    const table = document.getElementById("themeTableView");
+
+    if (this.value === "scatter") {
+        scatter.style.display = "block";
+        table.style.display = "none";
+    } else {
+        scatter.style.display = "none";
+        table.style.display = "block";
+    }
+});
+</script>
+
 
     <!-- 📝 BOTTOM-LEFT: Topic Summaries -->
     <div class="panel">
