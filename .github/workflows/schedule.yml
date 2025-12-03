@@ -1,14 +1,8 @@
 name: Daily Dashboard Builder
 
-# Required for GitHub Pages to deploy after workflow pushes to gh-pages
-permissions:
-  contents: write
-  pages: write
-  id-token: write
-
 on:
   schedule:
-    - cron: "0 11 * * *"   # Runs at 7 AM ET daily
+    - cron: "0 11 * * *"   # 7 AM ET
   workflow_dispatch:
 
 jobs:
@@ -19,7 +13,7 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # Needed for pushing branches
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -37,41 +31,39 @@ jobs:
           pip install -r requirements.txt
 
       - name: Generate Dashboard
-        shell: bash
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          export PYTHONPATH="${PYTHONPATH}:${{ github.workspace }}"
           python scripts/generate_dashboard.py
 
       # ---------------------------------------------------------
-      # 🔥 Deploy output to GH-PAGES branch
+      # 🚀 Deploy to gh-pages (Reliable method)
       # ---------------------------------------------------------
       - name: Deploy to gh-pages
-        shell: bash
         run: |
           echo "🔧 Switching to gh-pages branch..."
 
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Fetch branches
           git fetch origin
 
-          # Switch to gh-pages or create it
           if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
               git checkout gh-pages
           else
               git checkout --orphan gh-pages
           fi
 
-          # Clean branch
           rm -rf ./*
 
-          # Copy dashboard build output
-          cp -r dashboard/* .
+          if [ -d "$GITHUB_WORKSPACE/dashboard" ]; then
+              cp -r "$GITHUB_WORKSPACE/dashboard/"* .
+          else
+              echo "❌ ERROR: dashboard folder not found!"
+              ls -R "$GITHUB_WORKSPACE"
+              exit 1
+          fi
 
-          # Stage & commit
           git add -A
 
           if git diff --cached --quiet; then
@@ -79,5 +71,5 @@ jobs:
           else
             git commit -m "Automated dashboard update"
             git push origin gh-pages
-            echo "🚀 Pushed updated dashboard to gh-pages."
+            echo "🚀 Dashboard deployed."
           fi
