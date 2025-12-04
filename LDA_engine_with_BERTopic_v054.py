@@ -1,4 +1,3 @@
-
 import os
 import feedparser
 import numpy as np
@@ -93,6 +92,7 @@ def _normalize_rows(mat):
     norms[norms == 0] = 1
     return mat / norms
 
+
 def fetch_articles():
     docs = []
     for feed in RSS_FEEDS:
@@ -112,27 +112,96 @@ def fetch_articles():
     print("Fetched articles:", len(docs))
     return docs
 
-def gpt_summarize_topic(topic_id, docs_for_topic):
-    text = "\n\n".join(docs_for_topic[:8])
-    prompt = f"""
-TITLE: <3–5 WORDS>
-SUMMARY: <2–4 sentences>
 
-Content:
-{text}
+def get_representative_doc_ids(doc_ids, doc_embeddings, top_k=8):
+    """
+    Return the indices of the most representative documents for a topic.
+
+    We compute the centroid of the topic's document embeddings and
+    then select the top_k documents by cosine similarity to this centroid.
+    """
+    if not doc_ids:
+        return []
+    if len(doc_ids) <= top_k:
+        return doc_ids
+
+    emb = doc_embeddings[doc_ids]  # (n_docs_in_topic, dim)
+    centroid = np.mean(emb, axis=0, keepdims=True)
+    sims = cosine_similarity(emb, centroid).ravel()
+    ranked = np.argsort(-sims)
+    return [doc_ids[i] for i in ranked[:top_k]]
+
+
+def gpt_summarize_topic(topic_id, docs_for_topic):
+    """
+    Structured, sharper topic summary with:
+      - TITLE
+      - OVERVIEW (1–2 sentences)
+      - KEY EXAMPLES (2–4 bullets)
+    """
+    # Use all provided docs_for_topic (already representative)
+    articles_block = "\n\n".join(
+        [f"ARTICLE {i+1}:\n{doc}" for i, doc in enumerate(docs_for_topic)]
+    )
+
+    prompt = f"""
+You are summarizing a news topic formed by clustering multiple related articles.
+
+Write a structured, factual, concise summary in this exact layout:
+
+TITLE: <3–5 word topic label>
+
+OVERVIEW:
+1–2 sentences summarizing the main common theme across these articles.
+Be concrete and specific. Avoid vague macro language and grand conclusions.
+
+KEY EXAMPLES:
+- Short, distinct example 1 drawn from one article
+- Short, distinct example 2 drawn from another article
+- Short, distinct example 3 (optional)
+- Short, distinct example 4 (optional)
+
+Rules:
+- Use only information that appears in the articles.
+- Do not invent entities, events, or numbers.
+- Do not mention specific publishers or dates.
+- Do not explain your reasoning or mention this prompt.
+
+ARTICLES:
+{articles_block}
 """
+
     try:
         resp = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
         )
         out = resp.choices[0].message.content or ""
-        if "TITLE:" in out and "SUMMARY:" in out:
-            t = out.split("TITLE:", 1)[1].split("SUMMARY:", 1)
-            return {"title": t[0].strip(), "summary": t[1].strip()}
-    except:
-        pass
+
+        # Robust parsing: take first line after "TITLE:" as the title,
+        # and everything after that as the summary body.
+        if "TITLE:" in out:
+            _, after_title = out.split("TITLE:", 1)
+            after_title = after_title.strip()
+            lines = after_title.splitlines()
+
+            if lines:
+                title_line = lines[0].strip()
+                summary_body = "\n".join(lines[1:]).strip()
+            else:
+                title_line = f"TOPIC {topic_id}"
+                summary_body = out.strip()
+
+            return {
+                "title": title_line,
+                "summary": summary_body if summary_body else "Summary unavailable.",
+            }
+
+    except Exception as e:
+        print(f"GPT error for topic {topic_id}: {e}")
+
     return {"title": f"TOPIC {topic_id}", "summary": "Summary unavailable."}
+
 
 def run_bertopic_analysis(docs):
     umap_model = UMAP(n_neighbors=30, n_components=2, min_dist=0.0, metric="cosine")
@@ -217,25 +286,33 @@ def generate_topic_results():
     if not docs:
         return [], {}, None, {}, {}
 
+    # Topic model
     topic_model, topics = run_bertopic_analysis(docs)
     topic_info = topic_model.get_topic_info()
     valid_topic_ids = [t for t in topic_info.Topic if t != -1]
 
+    # Article embeddings (used for both representative docs + themes)
+    sent_model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
+    art_emb = _normalize_rows(sent_model.encode(docs, show_progress_bar=False))
+
     summaries = {}
     topic_embeddings = {}
 
+    # --- Summaries using representative docs ---
     for topic_id in valid_topic_ids:
         doc_ids = [i for i, t in enumerate(topics) if t == topic_id]
-        topic_docs = [docs[i] for i in doc_ids[:5]]
+        rep_ids = get_representative_doc_ids(doc_ids, art_emb, top_k=8)
+        topic_docs = [docs[i] for i in rep_ids]
+
         summaries[topic_id] = gpt_summarize_topic(topic_id, topic_docs)
         summaries[topic_id]["article_count"] = len(doc_ids)
         summaries[topic_id]["topic_id"] = topic_id
+
         topic_embeddings[topic_id] = topic_model.topic_embeddings_[topic_id].tolist()
 
-    model = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2")
-    art_emb = _normalize_rows(model.encode(docs, show_progress_bar=False))
+    # --- Theme assignment (re-use art_emb) ---
     theme_texts = [f"{t}. {THEME_DESCRIPTIONS[t]}" for t in THEMES]
-    theme_emb = _normalize_rows(model.encode(theme_texts, show_progress_bar=False))
+    theme_emb = _normalize_rows(sent_model.encode(theme_texts, show_progress_bar=False))
 
     theme_metrics = {t: {"volume": 0, "centrality": 0.0, "articles": set()} for t in THEMES}
     theme_metrics["Others"] = {"volume": 0, "centrality": 0.0, "articles": set()}
@@ -249,6 +326,7 @@ def generate_topic_results():
             theme_metrics[theme]["volume"] += 1
             theme_metrics[theme]["articles"].add(i)
 
+    # Centrality
     for t in THEMES:
         overlaps = 0
         Ta = theme_metrics[t]["articles"]
