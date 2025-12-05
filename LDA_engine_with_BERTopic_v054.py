@@ -57,6 +57,24 @@ RSS_FEEDS = [
     "https://www.darkreading.com/rss.xml",
     "https://www.scmagazine.com/section/feed",
     "https://feeds.arstechnica.com/arstechnica/technology-lab",
+    "https://www.bls.gov/feed/news-release.htm?view=all&format=rss",
+    "https://www.bea.gov/rss.xml",
+    "https://www.cbo.gov/publications/all/rss.xml",
+    "https://fredblog.stlouisfed.org/feed/",
+    "https://libertystreeteconomics.newyorkfed.org/feed/",
+    "https://pitchbook.com/news/feed",
+    "https://www.preqin.com/insights/rss",
+    "https://www.privatedebtinvestor.com/feed/",
+    "https://www.directlendingdeals.com/rss",
+    "https://www.coindesk.com/arc/outboundfeeds/rss/",
+    "https://www.theblock.co/rss",
+    "https://blog.chainalysis.com/feed/",
+    "https://www.trmlabs.com/blog?format=rss",
+    "https://cryptoslate.com/feed/",
+    "https://cointelegraph.com/rss",
+    "https://www.circle.com/blog/rss.xml",
+    "https://tether.to/en/feed/",
+    "https://forum.makerdao.com/latest.rss"
 ]
 
 THEMES = [
@@ -80,7 +98,7 @@ THEME_DESCRIPTIONS = {
     "Commercial real estate": "Property market stress and refinancing.",
     "Consumer debt": "Household leverage and affordability issues.",
     "Bank lending and credit risk": "Defaults and regulatory pressure.",
-    "Digital assets": "Crypto markets, stablecoins, tokenization, blockchain infrastructure, regulatory developments, and risks related to systemic spillovers into traditional finance
+    "Digital assets": "Crypto markets, stablecoins, tokenization, blockchain infrastructure, regulatory developments, and risks related to systemic spillovers into traditional finance.",
     "Others": "Articles not matching systemic themes.",
 }
 
@@ -355,4 +373,5 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print("Docs:", len(d))
     print("Themes:", tm.keys())
+
 
