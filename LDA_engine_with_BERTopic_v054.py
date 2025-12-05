@@ -98,7 +98,7 @@ THEME_DESCRIPTIONS = {
     "Commercial real estate": "Property market stress and refinancing.",
     "Consumer debt": "Household leverage and affordability issues.",
     "Bank lending and credit risk": "Defaults and regulatory pressure.",
-    "Digital assets": "Crypto markets, stablecoins, tokenization, blockchain infrastructure, regulatory developments, and risks related to systemic spillovers into traditional finance.",
+    "Digital assets": "Crypto markets, stablecoins, tokenization, blockchain infrastructure and systemic spillovers into traditional finance.",
     "Others": "Articles not matching systemic themes.",
 }
 
@@ -430,4 +430,5 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print("Docs:", len(d))
     print("Themes:", tm.keys())
+
 
