@@ -1,4 +1,3 @@
-
 import os
 import feedparser
 import numpy as np
@@ -34,7 +33,7 @@ RSS_FEEDS = [
     "https://asia.nikkei.com/rss/feed",
     "https://www.scmp.com/rss/91/feed",
     "https://feeds.reuters.com/reuters/technologyNews",
-    "https://feeds.feedburner.com/TechCrunch/",
+    #"https://feeds.feedburner.com/TechCrunch/",
     "https://www.ft.com/rss/home",
     "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
     "https://www.investing.com/rss/news_25.rss",
@@ -431,3 +430,4 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print("Docs:", len(d))
     print("Themes:", tm.keys())
+
