@@ -1,3 +1,4 @@
+
 import os
 import feedparser
 import numpy as np
@@ -74,7 +75,7 @@ RSS_FEEDS = [
     "https://cointelegraph.com/rss",
     "https://www.circle.com/blog/rss.xml",
     "https://tether.to/en/feed/",
-    "https://forum.makerdao.com/latest.rss"
+    "https://forum.makerdao.com/latest.rss",
 ]
 
 THEMES = [
@@ -86,7 +87,7 @@ THEMES = [
     "Commercial real estate",
     "Consumer debt",
     "Bank lending and credit risk",
-    "Digital assets"
+    "Digital assets",
 ]
 
 THEME_DESCRIPTIONS = {
@@ -103,6 +104,20 @@ THEME_DESCRIPTIONS = {
 }
 
 SIMILARITY_THRESHOLD = 0.20
+
+# Theme-driven importance weights for topic map emphasis
+THEME_WEIGHTS = {
+    "Recessionary pressures": 1.0,
+    "Inflation": 1.0,
+    "Private credit": 1.2,
+    "AI": 1.0,
+    "Cyber attacks": 1.0,
+    "Commercial real estate": 1.2,
+    "Consumer debt": 1.0,
+    "Bank lending and credit risk": 1.2,
+    "Digital assets": 0.7,
+    "Others": 1.0,
+}
 
 # ============================================================
 # HELPERS
@@ -159,7 +174,6 @@ def gpt_summarize_topic(topic_id, docs_for_topic):
       - OVERVIEW (1–2 sentences)
       - KEY EXAMPLES (2–4 bullets)
     """
-    # Use all provided docs_for_topic (already representative)
     articles_block = "\n\n".join(
         [f"ARTICLE {i+1}:\n{doc}" for i, doc in enumerate(docs_for_topic)]
     )
@@ -198,8 +212,6 @@ ARTICLES:
         )
         out = resp.choices[0].message.content or ""
 
-        # Robust parsing: take first line after "TITLE:" as the title,
-        # and everything after that as the summary body.
         if "TITLE:" in out:
             _, after_title = out.split("TITLE:", 1)
             after_title = after_title.strip()
@@ -247,12 +259,29 @@ def build_topic_map(topic_embeddings, summaries):
 
     volumes = []
     titles = {}
-    for item in summaries.values():
-        tid = item.get("topic_id") or list(summaries.keys())[list(summaries.values()).index(item)]
-        titles[tid] = item["title"]
-        volumes.append(item["article_count"])
+    weights = {}
 
-    size_scale = np.interp(volumes, (min(volumes), max(volumes)), (25, 70))
+    for tid in topic_ids:
+        meta = summaries.get(tid, {})
+        titles[tid] = meta.get("title", f"TOPIC {tid}")
+        volumes.append(meta.get("article_count", 0))
+        weights[tid] = meta.get("theme_weight", 1.0)
+
+    # Base size from volume
+    if len(volumes) == 0:
+        return "<p>No topic map available.</p>"
+
+    v_min = min(volumes)
+    v_max = max(volumes)
+    if v_max == v_min:
+        base_sizes = np.full(len(volumes), 40.0)
+    else:
+        base_sizes = np.interp(volumes, (v_min, v_max), (25, 70))
+
+    size_scale = [
+        float(bs * weights[tid]) for bs, tid in zip(base_sizes, topic_ids)
+    ]
+
     labels = {tid: "<br>".join(wrap(titles[tid], width=18)) for tid in topic_ids}
 
     label_offsets = {}
@@ -337,9 +366,27 @@ def generate_topic_results():
     theme_metrics = {t: {"volume": 0, "centrality": 0.0, "articles": set()} for t in THEMES}
     theme_metrics["Others"] = {"volume": 0, "centrality": 0.0, "articles": set()}
 
+    # dominant theme per article (for topic weights)
+    dominant_theme = ["Others"] * len(docs)
+
     for i, emb in enumerate(art_emb):
         sims = cosine_similarity([emb], theme_emb)[0]
-        assigned = [THEMES[idx] for idx, score in enumerate(sims) if score >= SIMILARITY_THRESHOLD]
+
+        # dominant theme (for weighting)
+        best_idx = int(np.argmax(sims))
+        best_score = sims[best_idx]
+        if best_score >= SIMILARITY_THRESHOLD:
+            dom = THEMES[best_idx]
+        else:
+            dom = "Others"
+        dominant_theme[i] = dom
+
+        # multi-assignment for theme metrics (unchanged)
+        assigned = [
+            THEMES[idx]
+            for idx, score in enumerate(sims)
+            if score >= SIMILARITY_THRESHOLD
+        ]
         if not assigned:
             assigned = ["Others"]
         for theme in assigned:
@@ -364,6 +411,17 @@ def generate_topic_results():
         theme_metrics[t].pop("centrality_raw", None)
         theme_metrics[t]["articles_raw"] = list(theme_metrics[t]["articles"])
 
+    # --- Topic-level theme weights for map emphasis ---
+    for topic_id in valid_topic_ids:
+        doc_ids = [i for i, t in enumerate(topics) if t == topic_id]
+        if not doc_ids:
+            w = 1.0
+        else:
+            w = float(
+                np.mean([THEME_WEIGHTS.get(dominant_theme[i], 1.0) for i in doc_ids])
+            )
+        summaries[topic_id]["theme_weight"] = w
+
     return docs, summaries, topic_model, topic_embeddings, theme_metrics
 
 # ============================================================
@@ -373,6 +431,3 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print("Docs:", len(d))
     print("Themes:", tm.keys())
-
-
-
