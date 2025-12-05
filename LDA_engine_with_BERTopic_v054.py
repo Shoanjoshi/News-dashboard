@@ -86,7 +86,7 @@ THEMES = [
     "Commercial real estate",
     "Consumer debt",
     "Bank lending and credit risk",
-    "Digital Assets"
+    "Digital assets"
 ]
 
 THEME_DESCRIPTIONS = {
@@ -373,5 +373,6 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print("Docs:", len(d))
     print("Themes:", tm.keys())
+
 
 
