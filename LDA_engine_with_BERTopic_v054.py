@@ -93,7 +93,7 @@ THEME_DESCRIPTIONS = {
     "Recessionary pressures": "Economic slowdown, declining demand.",
     "Inflation": "Price increases and monetary policy.",
     "Private credit": "Non-bank lending and liquidity risk.",
-    "AI": "Artificial intelligence and automation trends.",
+    "AI": "Artificial intelligence, data centers,hyperscalers and automation trends.",
     "Cyber attacks": "Security breaches and vulnerabilities.",
     "Commercial real estate": "Property market stress and refinancing.",
     "Consumer debt": "Household leverage and affordability issues.",
@@ -430,5 +430,6 @@ if __name__ == "__main__":
     d, s, m, e, tm = generate_topic_results()
     print("Docs:", len(d))
     print("Themes:", tm.keys())
+
 
 
