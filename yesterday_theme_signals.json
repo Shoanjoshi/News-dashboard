@@ -1,0 +1,42 @@
+{
+  "Recessionary pressures": {
+    "volume": 138,
+    "centrality": 0.9135593220338983
+  },
+  "Inflation": {
+    "volume": 176,
+    "centrality": 1.0
+  },
+  "Private credit": {
+    "volume": 128,
+    "centrality": 0.9457627118644067
+  },
+  "AI": {
+    "volume": 46,
+    "centrality": 0.13898305084745763
+  },
+  "Cyber attacks": {
+    "volume": 71,
+    "centrality": 0.23389830508474577
+  },
+  "Commercial real estate": {
+    "volume": 85,
+    "centrality": 0.6779661016949152
+  },
+  "Consumer debt": {
+    "volume": 124,
+    "centrality": 0.8576271186440678
+  },
+  "Bank lending and credit risk": {
+    "volume": 124,
+    "centrality": 0.8745762711864407
+  },
+  "Digital assets": {
+    "volume": 146,
+    "centrality": 0.9271186440677966
+  },
+  "Others": {
+    "volume": 131,
+    "centrality": 0.0
+  }
+}
